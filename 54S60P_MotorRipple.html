@@ -1,0 +1,519 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>54S60P NVH 動態頻譜分析儀 | Chief Engineer Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Warm Neutrals (Slate 50 to 900) with Electric Teal, Amber, and Rose accents for data highlighting, ensuring a clean, professional engineering vibe on a light background. -->
+    <!-- Application Structure Plan: The SPA is structured as a 'Dynamic NVH Command Center'. It prioritizes an interactive Campbell Diagram simulator at the top, allowing the Chief Engineer to input RPM and instantly see frequency shifts. This is followed by detailed breakdowns of the physical phenomena (Cogging, Mutual, PWM) and actionable engineering strategies. This top-down approach (from dynamic overview to root cause to solution) aligns with how a lead engineer troubleshoots complex systems. -->
+    <!-- Visualization & Content Choices: 1. Goal: Compare/Change (Campbell Diagram) -> Method: Chart.js Line Chart with dynamic vertical RPM tracking line -> Justification: Campbell diagrams are the standard for NVH order analysis; making it interactive allows instant critical RPM identification. 2. Goal: Inform (Ripple Sources) -> Method: Interactive Grid Cards with dynamic value updates based on the RPM slider -> Justification: Connects the abstract math directly to the current operating point. 3. Tool: Chart.js (NO SVG/Mermaid used). -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500;700;900&display=swap');
+        body { font-family: 'Noto Sans TC', sans-serif; background-color: #f8fafc; }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 1000px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 50vh;
+            max-height: 500px;
+            min-height: 350px;
+        }
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 24px;
+            width: 24px;
+            border-radius: 50%;
+            background: #0f172a;
+            cursor: pointer;
+            margin-top: -8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 8px;
+            cursor: pointer;
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        .data-card { transition: all 0.2s ease; }
+        .data-card:hover { transform: translateY(-2px); box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1); }
+        
+        .math-var {
+            font-family: 'Cambria', 'Georgia', 'Times New Roman', serif;
+            font-style: italic;
+            font-weight: 600;
+        }
+        
+        @keyframes pulse-border {
+            0%, 100% { border-color: rgba(217, 119, 6, 0.4); box-shadow: 0 0 0 0px rgba(217, 119, 6, 0.2); }
+            50% { border-color: rgba(217, 119, 6, 1); box-shadow: 0 0 12px 4px rgba(217, 119, 6, 0.2); }
+        }
+        .highlight-pulse {
+            animation: pulse-border 2s infinite ease-in-out;
+        }
+    </style>
+</head>
+<body class="text-slate-800 antialiased selection:bg-teal-200">
+
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        
+        <header class="mb-8 border-b-2 border-slate-200 pb-6">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+                <div>
+                    <div class="flex items-center gap-2 mb-2">
+                        <span class="text-2xl">⚡</span>
+                        <h1 class="text-3xl font-black tracking-tight text-slate-900">54S60P 輪穀馬達 NVH 分析儀</h1>
+                    </div>
+                    <p class="text-slate-500 font-medium text-lg">老大，這是為您建立的動態激振源坎貝爾圖 (Campbell Diagram) 面板。</p>
+                </div>
+                <div class="flex gap-4 text-sm font-bold bg-slate-100 px-4 py-2 rounded-lg border border-slate-200">
+                    <div class="flex flex-col"><span class="text-slate-400 text-xs">Ns (槽)</span><span class="text-teal-700 text-lg">54</span></div>
+                    <div class="flex flex-col"><span class="text-slate-400 text-xs">2p (極)</span><span class="text-teal-700 text-lg">60</span></div>
+                    <div class="flex flex-col"><span class="text-slate-400 text-xs">f_sw (切頻)</span><span class="text-teal-700 text-lg">16k</span></div>
+                    <div class="flex flex-col"><span class="text-slate-400 text-xs">GCD</span><span class="text-rose-600 text-lg">6</span></div>
+                </div>
+            </div>
+            <div class="mt-4 text-sm text-slate-600 bg-teal-50 border-l-4 border-teal-500 p-3 rounded-r">
+                <strong>系統核心介紹：</strong> 本模組透過解析馬達極槽幾何與 SVPWM 載波特性，將 180階、360階、540階機械倍頻，以及高頻切頻旁頻帶等激振源視覺化。請透過下方控制台模擬不同車速下的激振頻率，以利於進行結構模態避讓與韌體諧波注入策略制定。
+            </div>
+        </header>
+
+        <section class="mb-10 bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
+            <h2 class="text-xl font-bold mb-4 flex items-center gap-2"><span>🎯</span> 運轉工況模擬器 (Operating Point Simulator)</h2>
+            <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+                
+                <div class="lg:col-span-1 flex flex-col gap-5 bg-slate-50 p-5 rounded-xl border border-slate-100">
+                    <div>
+                        <div class="flex justify-between items-center mb-2">
+                            <label class="text-sm font-bold text-slate-700">機械轉速 (RPM)</label>
+                            <div class="flex items-center gap-1.5">
+                                <input type="number" id="rpmInput" min="0" max="1200" value="1000" class="w-20 px-2 py-0.5 text-right font-mono font-bold text-slate-900 border-2 border-slate-300 rounded focus:border-teal-500 focus:outline-none focus:ring-0">
+                                <span class="text-xs text-slate-400 font-bold">rpm</span>
+                            </div>
+                        </div>
+                        <input type="range" id="rpmSlider" min="0" max="1200" value="1000" step="10">
+                        <div class="flex justify-between text-[10px] text-slate-400 mt-1 font-mono">
+                            <span>0 rpm</span><span>1200 rpm</span>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-center">
+                            <div class="text-[10px] text-slate-500 font-bold mb-1">機械基頻 <span class="math-var">f</span><sub>m</sub></div>
+                            <div class="text-xl font-black text-slate-800 font-mono" id="valFm">16.7</div>
+                            <div class="text-[10px] text-slate-400">Hz</div>
+                        </div>
+                        <div class="bg-white p-3 rounded-lg border border-slate-200 shadow-sm text-center">
+                            <div class="text-[10px] text-slate-500 font-bold mb-1">電氣基頻 <span class="math-var">f</span><sub>e</sub></div>
+                            <div class="text-xl font-black text-blue-600 font-mono" id="valFe">500</div>
+                            <div class="text-[10px] text-slate-400">Hz</div>
+                        </div>
+                    </div>
+                    
+                    <div class="p-4 bg-amber-50/80 border-l-4 border-amber-600 rounded-r-lg highlight-pulse">
+                        <div class="text-xs font-black text-amber-800 uppercase tracking-wider flex items-center gap-1.5">
+                            <span class="animate-ping inline-flex h-2 w-2 rounded-full bg-amber-600"></span>
+                            主電力矩漣波基頻 (180th)
+                        </div>
+                        <div class="text-3xl font-black text-amber-700 font-mono mt-1" id="mainRippleHz">3000 <span class="text-xs font-bold text-slate-500">Hz</span></div>
+                        <div class="text-[10px] text-slate-600 mt-1.5 leading-relaxed">
+                            此頻率由 FOC 動態帶入之 6 &middot; <span class="math-var">f</span><sub>e</sub>（即 180 &middot; <span class="math-var">f</span><sub>m</sub>）調變而來，屬負載下最巨之剪切激振源。
+                        </div>
+                    </div>
+                </div>
+
+                <div class="lg:col-span-3 bg-slate-50/50 p-2 rounded-xl border border-slate-100">
+                    <div class="chart-container">
+                        <canvas id="campbellChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="mb-10">
+            <h2 class="text-xl font-bold mb-6 flex items-center gap-2 border-b border-slate-200 pb-2"><span>📊</span> 激振源頻譜即時解析 (Ripple Frequency Breakdown)</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div class="data-card bg-white p-6 rounded-xl border-t-4 border-rose-500 shadow-sm">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="font-bold text-lg text-slate-800">無載齒槽轉矩<br><span class="text-sm font-normal text-slate-500">Cogging Torque (LCM: 540)</span></h3>
+                        <span class="text-2xl">🧲</span>
+                    </div>
+                    <div class="mb-4">
+                        <span class="text-3xl font-black text-rose-600 font-mono" id="cardCogging">9000</span> <span class="text-slate-500 font-bold text-sm">Hz</span>
+                    </div>
+                    <div class="flex items-center gap-2 text-sm text-slate-600 bg-slate-50 p-2 rounded">
+                        <span class="font-bold text-slate-700 bg-slate-200 px-2 py-0.5 rounded text-xs">540 &middot; <span class="math-var">f</span><sub>m</sub></span>
+                        機械階數 (Order w.r.t <span class="math-var">f</span><sub>m</sub>)
+                    </div>
+                    <p class="mt-4 text-xs text-slate-500 leading-relaxed">
+                        LCM(54, 60) 高達 540，頻率極高但幅值極小。容易在低速蠕行時引發薄壁外轉子的高頻微震與嘯叫。
+                    </p>
+                </div>
+
+                <div class="data-card bg-white p-6 rounded-xl border-t-4 border-amber-500 shadow-sm">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="font-bold text-lg text-slate-800">有載電磁漣波<br><span class="text-sm font-normal text-slate-500">Mutual Torque (6<span class="math-var">k</span> &middot; <span class="math-var">f</span><sub>e</sub>)</span></h3>
+                        <span class="text-2xl">⚙️</span>
+                    </div>
+                    <div class="space-y-3 mb-4">
+                        <div class="flex justify-between items-end border-b border-slate-100 pb-1">
+                            <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">180 &middot; <span class="math-var">f</span><sub>m</sub> (6 &middot; <span class="math-var">f</span><sub>e</sub>)</span>
+                            <div><span class="text-2xl font-black text-amber-600 font-mono" id="cardMutual1">3000</span> <span class="text-xs font-bold text-slate-500">Hz</span></div>
+                        </div>
+                        <div class="flex justify-between items-end">
+                            <span class="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-1 rounded">360 &middot; <span class="math-var">f</span><sub>m</sub> (12 &middot; <span class="math-var">f</span><sub>e</sub>)</span>
+                            <div><span class="text-xl font-bold text-amber-500 font-mono" id="cardMutual2">6000</span> <span class="text-xs font-bold text-slate-500">Hz</span></div>
+                        </div>
+                    </div>
+                    <p class="mt-2 text-xs text-slate-500 leading-relaxed">
+                        空間與時間諧波之交叉乘積。中低速大電流加速時，會使後擺臂及懸吊結構產生強烈的「顆粒粗糙感」。
+                    </p>
+                </div>
+
+                <div class="data-card bg-white p-6 rounded-xl border-t-4 border-teal-500 shadow-sm">
+                    <div class="flex justify-between items-start mb-4">
+                        <h3 class="font-bold text-lg text-slate-800">SVPWM 切頻旁頻帶<br><span class="text-sm font-normal text-slate-500">Switching Ripple (16kHz)</span></h3>
+                        <span class="text-2xl">🌊</span>
+                    </div>
+                    <div class="space-y-2 mb-4">
+                        <div class="flex justify-between items-center bg-teal-50 px-2 py-1.5 rounded">
+                            <span class="text-xs font-bold text-teal-800">16 kHz - 90 &middot; <span class="math-var">f</span><sub>m</sub></span>
+                            <div><span class="text-lg font-black text-teal-700 font-mono" id="cardPwmL">14500</span> <span class="text-[10px] text-slate-500">Hz</span></div>
+                        </div>
+                        <div class="flex justify-between items-center bg-teal-50 px-2 py-1.5 rounded">
+                            <span class="text-xs font-bold text-teal-800">16 kHz + 90 &middot; <span class="math-var">f</span><sub>m</sub></span>
+                            <div><span class="text-lg font-black text-teal-700 font-mono" id="cardPwmH">17500</span> <span class="text-[10px] text-slate-500">Hz</span></div>
+                        </div>
+                        <div class="text-right text-[10px] text-slate-400 pt-1 border-t border-slate-100">
+                            二倍頻中心: 32,000 Hz (固定)
+                        </div>
+                    </div>
+                    <p class="mt-1 text-xs text-slate-500 leading-relaxed">
+                        典型高頻切頻電磁嘯叫音 (Whine)。呈 V 字形擴散，極易在特定轉速與馬達端蓋發生高頻耦合。
+                    </p>
+                </div>
+
+            </div>
+        </section>
+
+        <section class="mb-10 bg-slate-100 rounded-2xl p-6 border border-slate-200">
+            <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-slate-900"><span>💡</span> 徑向力階數與轉速關係理論</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-slate-700 leading-relaxed">
+                <div class="bg-white p-5 rounded-xl border border-slate-200/60 shadow-sm">
+                    <h4 class="font-bold text-slate-900 mb-3 flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                        <span class="text-teal-600">■</span> 1. 空間階數 (<span class="math-var">m</span>) 與時間階數 (Temporal Order)
+                    </h4>
+                    <p class="mb-3">
+                        在馬達內，氣隙磁鏈所產生的「徑向電磁力」會在空間圓周上呈波狀分布。其<strong>空間階數 <span class="math-var">m</span></strong> 描述了力波在定子圓周分布的波峰波谷數量：
+                    </p>
+                    <ul class="list-disc pl-5 space-y-2 mb-3 text-slate-600">
+                        <li>
+                            <span class="font-semibold text-slate-800"><span class="math-var">m</span> = 0</span>：空間零序。定子圓周所有點同時向外膨脹或向內壓縮，稱為<strong>呼吸模態 (Breathing Mode)</strong>。
+                        </li>
+                        <li>
+                            <span class="font-semibold text-slate-800"><span class="math-var">m</span> = 1, 2</span>：通常由馬達定轉子偏心或不平衡磁拉力引發，會造成軸承及整機高頻擺動。
+                        </li>
+                    </ul>
+                    <p>
+                        當馬達旋轉時，這些空間旋轉力波作用於定子齒，就會在時間軸上調變成時間頻率：
+                        <span class="block text-center py-2 my-2 bg-slate-50 rounded font-mono font-bold text-teal-800">
+                            <span class="math-var">f</span><sub>temporal</sub> = Order &middot; <span class="math-var">f</span><sub>m</sub>
+                        </span>
+                    </p>
+                </div>
+                
+                <div class="bg-white p-5 rounded-xl border border-slate-200/60 shadow-sm">
+                    <h4 class="font-bold text-slate-900 mb-3 flex items-center gap-1.5 border-b border-slate-100 pb-2">
+                        <span class="text-teal-600">■</span> 2. 為什麼 Campbell 圖上激振頻率與轉速成線性正比？
+                    </h4>
+                    <p class="mb-3">
+                        因為時間頻率與轉速具備恆定比例。以 54S60P 為例：
+                    </p>
+                    <div class="bg-slate-950 p-4 rounded-lg font-mono text-center mb-4 shadow-inner text-teal-400">
+                        <div class="text-[11px] text-slate-500 mb-1">物理激振方程</div>
+                        <span class="math-var">f</span> = 階數 (Order) &times; <span class="math-var">N</span> / 60
+                    </div>
+                    <p class="mb-3">
+                        所以在坎貝爾圖中，各個激振源頻率都是從原點出發、斜率為 <span class="font-semibold">Order / 60</span> 的射線：
+                    </p>
+                    <ul class="list-disc pl-5 space-y-2 text-slate-600">
+                        <li>
+                            <strong class="text-slate-800">180階射線 (斜率 = 3)：</strong> 
+                            當轉速為 1000 rpm 時，對應頻率為 180 &times; 1000 / 60 = <span class="font-bold text-amber-600">3000 Hz</span>。
+                        </li>
+                        <li>
+                            <strong class="text-slate-800">540階射線 (斜率 = 9)：</strong> 
+                            轉速僅需 400 rpm，齒槽轉矩震動即達 540 &times; 400 / 60 = <span class="font-bold text-rose-600">3600 Hz</span>。
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="bg-slate-900 text-slate-50 rounded-2xl p-8 shadow-lg">
+            <h2 class="text-2xl font-black mb-6 flex items-center gap-3 text-white">
+                <span>🛠️</span> 首席工程師行動指南 (Action Plan)
+            </h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-8 h-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold">1</div>
+                        <h4 class="font-bold text-amber-400">結構模態避讓 (CAE)</h4>
+                    </div>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        要求 CAE 團隊分析外轉子鋼圈與胎框組合體。其自由與約束模態必須避開 <strong>180th</strong> 與 <strong>360th</strong> 機械階數線，特別是 400~800 rpm 的巡航區間。
+                    </p>
+                </div>
+
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700">
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-8 h-8 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold">2</div>
+                        <h4 class="font-bold text-rose-400">同軸度公差嚴控 (ME)</h4>
+                    </div>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        GCD=6 代表最低徑向力階數為 6 階(變形剛性高)。若定子加工偏心將退化出 1 階和 2 階徑向力 (Breathing mode)，需嚴格管制加工同軸度公差。
+                    </p>
+                </div>
+
+                <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 relative overflow-hidden">
+                    <div class="absolute -right-4 -top-4 text-6xl opacity-10">💻</div>
+                    <div class="flex items-center gap-2 mb-3">
+                        <div class="w-8 h-8 rounded-full bg-teal-500/20 text-teal-400 flex items-center justify-center font-bold">3</div>
+                        <h4 class="font-bold text-teal-400">主動諧波抑制 (FW/FOC)</h4>
+                    </div>
+                    <p class="text-sm text-slate-300 leading-relaxed">
+                        老大您的強項。若 180th (6fe) 漣波過大，直接在 MCU 韌體啟用 <strong>5th & 7th Current Injection</strong>，在 d-q 軸主動注入反向諧波電流，從源頭抵消 NVH 激振。
+                    </p>
+                </div>
+
+            </div>
+        </section>
+        
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            const rpmSlider = document.getElementById('rpmSlider');
+            const rpmInput = document.getElementById('rpmInput');
+            const valFm = document.getElementById('valFm');
+            const valFe = document.getElementById('valFe');
+            const mainRippleHz = document.getElementById('mainRippleHz');
+            
+            const cardCogging = document.getElementById('cardCogging');
+            const cardMutual1 = document.getElementById('cardMutual1');
+            const cardMutual2 = document.getElementById('cardMutual2');
+            const cardPwmL = document.getElementById('cardPwmL');
+            const cardPwmH = document.getElementById('cardPwmH');
+
+            const p = 30;
+            const fsw = 16000;
+
+            const generateOrderData = (orderMultiplier) => {
+                let data = [];
+                for(let r = 0; r <= 1200; r += 50) {
+                    data.push({ x: r, y: orderMultiplier * (r / 60) });
+                }
+                return data;
+            };
+
+            const generatePwmData = (sign) => {
+                let data = [];
+                for(let r = 0; r <= 1200; r += 50) {
+                    let fm = r / 60;
+                    data.push({ x: r, y: fsw + (sign * 90 * fm) });
+                }
+                return data;
+            };
+
+            const ctx = document.getElementById('campbellChart').getContext('2d');
+            
+            Chart.defaults.font.family = "'Noto Sans TC', sans-serif";
+            Chart.defaults.color = '#64748b';
+
+            const campbellChart = new Chart(ctx, {
+                type: 'scatter',
+                data: {
+                    datasets: [
+                        {
+                            label: '無載齒槽 (540th)',
+                            data: generateOrderData(540),
+                            borderColor: '#e11d48',
+                            backgroundColor: '#e11d48',
+                            borderWidth: 2,
+                            showLine: true,
+                            pointRadius: 0,
+                            pointHitRadius: 10
+                        },
+                        {
+                            label: '有載電磁 (180th)',
+                            data: generateOrderData(180),
+                            borderColor: '#d97706',
+                            backgroundColor: '#d97706',
+                            borderWidth: 3,
+                            showLine: true,
+                            pointRadius: 0,
+                            pointHitRadius: 10
+                        },
+                        {
+                            label: '有載電磁 (360th)',
+                            data: generateOrderData(360),
+                            borderColor: '#f59e0b',
+                            backgroundColor: '#f59e0b',
+                            borderWidth: 2,
+                            borderDash: [5, 5],
+                            showLine: true,
+                            pointRadius: 0,
+                            pointHitRadius: 10
+                        },
+                        {
+                            label: 'PWM 旁頻帶 (-)',
+                            data: generatePwmData(-1),
+                            borderColor: '#0f766e',
+                            backgroundColor: '#0f766e',
+                            borderWidth: 2,
+                            showLine: true,
+                            pointRadius: 0,
+                            pointHitRadius: 10
+                        },
+                        {
+                            label: 'PWM 旁頻帶 (+)',
+                            data: generatePwmData(1),
+                            borderColor: '#0f766e',
+                            backgroundColor: '#0f766e',
+                            borderWidth: 2,
+                            showLine: true,
+                            pointRadius: 0,
+                            pointHitRadius: 10
+                        },
+                        {
+                            label: '當前轉速指示線',
+                            data: [{x: 1000, y: 0}, {x: 1000, y: 20000}],
+                            borderColor: '#0f172a',
+                            backgroundColor: '#0f172a',
+                            borderWidth: 2,
+                            borderDash: [3, 3],
+                            showLine: true,
+                            pointRadius: 0,
+                            fill: false
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Campbell Diagram (激振頻率 vs 機械轉速)',
+                            font: { size: 16, weight: 'bold' },
+                            color: '#0f172a'
+                        },
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                boxWidth: 8
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                            titleFont: { size: 14 },
+                            bodyFont: { size: 13 },
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) {
+                                    if(context.dataset.label === '當前轉速指示線') return null;
+                                    return context.dataset.label + ': ' + Math.round(context.parsed.y) + ' Hz';
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            min: 0,
+                            max: 1200,
+                            title: {
+                                display: true,
+                                text: '馬達轉速 (RPM)',
+                                font: { weight: 'bold' }
+                            },
+                            grid: { color: '#f1f5f9' }
+                        },
+                        y: {
+                            min: 0,
+                            max: 20000,
+                            title: {
+                                display: true,
+                                text: '激振頻率 (Hz)',
+                                font: { weight: 'bold' }
+                            },
+                            grid: { color: '#f1f5f9' }
+                        }
+                    }
+                }
+            });
+
+            function updateValues(targetRpm) {
+                let rpm = targetRpm;
+                if (rpm < 0) rpm = 0;
+                if (rpm > 1200) rpm = 1200;
+
+                const fm = rpm / 60;
+                const fe = p * fm;
+                
+                rpmSlider.value = rpm;
+                rpmInput.value = rpm;
+                
+                valFm.innerHTML = fm.toFixed(1);
+                valFe.innerHTML = Math.round(fe);
+                
+                mainRippleHz.innerHTML = `${Math.round(180 * fm)} <span class="text-xs font-bold text-slate-500">Hz</span>`;
+
+                cardCogging.innerHTML = Math.round(540 * fm);
+                cardMutual1.innerHTML = Math.round(180 * fm);
+                cardMutual2.innerHTML = Math.round(360 * fm);
+                
+                cardPwmL.innerHTML = Math.round(fsw - (90 * fm));
+                cardPwmH.innerHTML = Math.round(fsw + (90 * fm));
+
+                campbellChart.data.datasets[5].data = [
+                    {x: rpm, y: 0},
+                    {x: rpm, y: 20000}
+                ];
+                campbellChart.update('none'); 
+            }
+
+            rpmSlider.addEventListener('input', (e) => {
+                updateValues(parseInt(e.target.value));
+            });
+
+            rpmInput.addEventListener('change', (e) => {
+                let parsed = parseInt(e.target.value);
+                if (isNaN(parsed)) parsed = 1000;
+                updateValues(parsed);
+            });
+            
+            updateValues(1000);
+        });
+    </script>
+</body>
+</html>

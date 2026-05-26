@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HubMotor_NTC電路設計靈敏度試算工具</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        gray: { 850: '#1f2937', 900: '#111827' },
+                        cyan: { 400: '#22d3ee', 500: '#06b6d4' }
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen p-6 font-sans antialiased">
+    <div class="max-w-7xl mx-auto space-y-6">
+        <header class="border-b border-gray-700 pb-4 flex justify-between items-end">
+            <div>
+                <h1 class="text-3xl font-bold text-cyan-400">GGR EE  Tool BOX_01</h1>
+                <p class="text-gray-400 text-sm mt-1">Gogoro Powertrain Thermal Sensing Optimization Tool</p>
+            </div>
+            <div class="text-xs text-gray-500 font-mono">FW LUT Builder Activated</div>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <!-- Control Panel -->
+            <div class="lg:col-span-1 bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-700 space-y-4 h-fit">
+                <h2 class="text-lg font-semibold text-white mb-4 border-b border-gray-600 pb-2">電路參數設定</h2>
+                
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">系統電壓 (Vcc)</label>
+                    <input type="number" id="vcc" value="3.3" step="0.1" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">上拉電阻 R_pullup (Ω)</label>
+                    <input type="number" id="rpullup" value="2000" step="100" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-gray-400 mb-1">目標 NTC (R25)</label>
+                    <select id="ntcType" class="w-full bg-gray-700 border border-gray-600 rounded-lg px-3 py-2 text-white focus:outline-none focus:border-cyan-500">
+                        <option value="10000_3940">10kΩ (B: 3940) - 業界常規</option>
+                        <option value="22000_3800">22kΩ (B: 3800) - 均衡型</option>
+                        <option value="47000_3960" selected>47kΩ (B: 3960) - 最佳化(高溫解析)</option>
+                        <option value="68000_4100">68kΩ (B: 4100) - 極端高溫型</option>
+                    </select>
+                </div>
+
+                <div class="pt-4 border-t border-gray-600">
+                    <h2 class="text-sm font-semibold text-white mb-2">單點溫度反查 (Temp ➔ Vout)</h2>
+                    <div class="flex space-x-2 items-center">
+                        <input type="number" id="queryTemp" value="25" step="1" class="w-20 bg-gray-700 border border-gray-600 rounded-lg px-2 py-1 text-white focus:outline-none focus:border-cyan-500">
+                        <span class="text-sm text-gray-400">°C ➔</span>
+                        <span id="queryVoltResult" class="text-xl font-bold text-pink-400">-- V</span>
+                    </div>
+                    <div class="text-xs text-gray-500 mt-1" id="queryResResult">R_NTC: -- Ω</div>
+                </div>
+
+                <div class="pt-4 border-t border-gray-600">
+                    <div class="text-sm text-gray-400 mb-2">最佳解析度發生溫度點估算：</div>
+                    <div id="sweetSpot" class="text-2xl font-bold text-cyan-400">-- °C</div>
+                </div>
+            </div>
+
+            <!-- Charts & Tables -->
+            <div class="lg:col-span-3 space-y-6">
+                <!-- Visualizations -->
+                <div class="bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-700 flex flex-col space-y-6">
+                    <div class="relative h-64 w-full">
+                        <canvas id="voltageChart"></canvas>
+                    </div>
+                    <div class="relative h-48 w-full">
+                        <canvas id="sensitivityChart"></canvas>
+                    </div>
+                </div>
+
+                <!-- Tables Section -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    
+                    <!-- 1. Full Temperature Table -->
+                    <div class="bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-700 flex flex-col h-[500px]">
+                        <h2 class="text-lg font-semibold text-white mb-3 border-b border-gray-600 pb-2">完整解析表 (Temp vs Vout)</h2>
+                        <div class="overflow-y-auto flex-grow pr-2 scrollbar-thin scrollbar-thumb-gray-600">
+                            <table class="w-full text-sm text-left text-gray-300 relative">
+                                <thead class="text-xs text-gray-400 uppercase bg-gray-900 sticky top-0 z-10">
+                                    <tr>
+                                        <th class="px-3 py-2">溫度 (°C)</th>
+                                        <th class="px-3 py-2">R_NTC (Ω)</th>
+                                        <th class="px-3 py-2">ADC (V)</th>
+                                        <th class="px-3 py-2 text-right">解析度 (mV/°C)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="fullTableBody" class="divide-y divide-gray-700">
+                                    <!-- Dynamic Content -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- 2. FW LUT Generator -->
+                    <div class="bg-gray-800 p-5 rounded-xl shadow-lg border border-gray-700 flex flex-col h-[500px]">
+                        <div class="flex justify-between items-end mb-3 border-b border-gray-600 pb-2">
+                            <h2 class="text-lg font-semibold text-cyan-400">韌體 ADC 查表 (32 等分)</h2>
+                            <button onclick="copyToClipboard()" class="text-xs bg-cyan-600 hover:bg-cyan-500 text-white px-3 py-1 rounded transition-colors">
+                                複製 C Array
+                            </button>
+                        </div>
+                        
+                        <!-- C Array Output Box -->
+                        <div class="bg-gray-900 rounded p-3 mb-4 border border-gray-700 overflow-x-auto text-xs font-mono text-cyan-300">
+                            <pre id="cArrayOutput"></pre>
+                        </div>
+
+                        <div class="overflow-y-auto flex-grow pr-2 scrollbar-thin scrollbar-thumb-gray-600">
+                            <table class="w-full text-sm text-left text-gray-300 relative">
+                                <thead class="text-xs text-gray-400 uppercase bg-gray-900 sticky top-0 z-10">
+                                    <tr>
+                                        <th class="px-3 py-2">Index [0:31]</th>
+                                        <th class="px-3 py-2">電壓界線 (V)</th>
+                                        <th class="px-3 py-2 text-right">對應溫度 (°C)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="lutTableBody" class="divide-y divide-gray-700 font-mono">
+                                    <!-- Dynamic Content -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let voltageChart, sensitivityChart;
+
+        // 計算 NTC 阻值 (使用 Beta 公式)
+        function calculateNTCResistance(r25, beta, tempC) {
+            const T0 = 298.15; // 25°C in Kelvin
+            const T = tempC + 273.15;
+            return r25 * Math.exp(beta * (1 / T - 1 / T0));
+        }
+
+        // 逆運算: 從電壓推算溫度
+        function calculateTempFromVoltage(v, vcc, rpullup, r25, beta) {
+            if (v <= 0.01) return 999.0;     // 極端短路，視為超高溫
+            if (v >= vcc - 0.01) return -99.0; // 極端斷路，視為超低溫
+            
+            const rNtc = rpullup * (v / (vcc - v));
+            const T0 = 298.15;
+            const invT = (1/T0) + (1/beta) * Math.log(rNtc / r25);
+            return (1 / invT) - 273.15;
+        }
+
+        // 單點反查運算
+        function updateSingleQuery() {
+            const vcc = parseFloat(document.getElementById('vcc').value);
+            const rpullup = parseFloat(document.getElementById('rpullup').value);
+            const ntcVal = document.getElementById('ntcType').value.split('_');
+            const r25 = parseFloat(ntcVal[0]);
+            const beta = parseFloat(ntcVal[1]);
+            const targetTemp = parseFloat(document.getElementById('queryTemp').value);
+
+            if (isNaN(targetTemp)) return;
+
+            const rNtc = calculateNTCResistance(r25, beta, targetTemp);
+            const vOut = vcc * (rNtc / (rpullup + rNtc));
+
+            document.getElementById('queryVoltResult').innerText = vOut.toFixed(4) + ' V';
+            document.getElementById('queryResResult').innerText = `R_NTC: ${rNtc >= 1000 ? (rNtc/1000).toFixed(2)+'k' : rNtc.toFixed(1)} Ω`;
+        }
+
+        function updateData() {
+            const vcc = parseFloat(document.getElementById('vcc').value);
+            const rpullup = parseFloat(document.getElementById('rpullup').value);
+            const ntcVal = document.getElementById('ntcType').value.split('_');
+            const r25 = parseFloat(ntcVal[0]);
+            const beta = parseFloat(ntcVal[1]);
+
+            // === 1. Chart Data Prep ===
+            const temps = [];
+            const voltages = [];
+            const sensitivities = [];
+            
+            let minDiff = Infinity;
+            let sweetSpotTemp = 0;
+
+            const fullTableBody = document.getElementById('fullTableBody');
+            fullTableBody.innerHTML = '';
+
+            for (let t = -20; t <= 200; t++) {
+                temps.push(t);
+                const rNtc = calculateNTCResistance(r25, beta, t);
+                const vOut = vcc * (rNtc / (rpullup + rNtc));
+                voltages.push(vOut);
+
+                // Find optimal resolution point
+                const diff = Math.abs(rNtc - rpullup);
+                if (diff < minDiff) {
+                    minDiff = diff;
+                    sweetSpotTemp = t;
+                }
+
+                // Sensitivity calculation
+                let sens = 0;
+                if (t > -20) {
+                    const rNtcPrev = calculateNTCResistance(r25, beta, t - 1);
+                    const vOutPrev = vcc * (rNtcPrev / (rpullup + rNtcPrev));
+                    sens = Math.abs(vOut - vOutPrev) * 1000;
+                    sensitivities.push(sens);
+                } else {
+                    sensitivities.push(0);
+                }
+
+                // Populate Full Table (Step by 1)
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td class="px-3 py-1 font-medium">${t}</td>
+                    <td class="px-3 py-1">${rNtc >= 1000 ? (rNtc/1000).toFixed(2)+'k' : rNtc.toFixed(1)}</td>
+                    <td class="px-3 py-1 text-cyan-300">${vOut.toFixed(4)}</td>
+                    <td class="px-3 py-1 text-right text-pink-400">${sens.toFixed(2)}</td>
+                `;
+                fullTableBody.appendChild(tr);
+            }
+
+            document.getElementById('sweetSpot').innerText = sweetSpotTemp + ' °C';
+
+            // === 2. LUT Data Prep (32 Bins) ===
+            const lutTableBody = document.getElementById('lutTableBody');
+            lutTableBody.innerHTML = '';
+            
+            let cArrayString = `// ADC 32-step Temp LUT (Vcc=${vcc}V, R_pu=${rpullup}Ω)\n`;
+            cArrayString += `const float ntc_lut_32[32] = {\n    `;
+
+            const lutValues = [];
+            for (let i = 0; i < 32; i++) {
+                // Map index 0->31 to voltage 0V->Vcc
+                const v = i * (vcc / 31);
+                let t = calculateTempFromVoltage(v, vcc, rpullup, r25, beta);
+                
+                // Cap the extremes for practicality in display
+                let displayT = t.toFixed(1);
+                if (t > 250) displayT = "999.0 (Short)";
+                if (t < -40) displayT = "-99.0 (Open)";
+
+                lutValues.push(t > 250 ? 999.0 : (t < -40 ? -99.0 : parseFloat(t.toFixed(1))));
+
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-gray-700 transition-colors";
+                tr.innerHTML = `
+                    <td class="px-3 py-1 text-gray-400">[${i}]</td>
+                    <td class="px-3 py-1 text-cyan-300">${v.toFixed(3)} V</td>
+                    <td class="px-3 py-1 text-right ${t>150||t<-20 ? 'text-red-400' : 'text-green-400'}">${displayT}</td>
+                `;
+                lutTableBody.appendChild(tr);
+            }
+
+            // Format C Array
+            for(let i=0; i<32; i++){
+                cArrayString += lutValues[i].toFixed(1) + "f, ";
+                if((i+1) % 8 === 0 && i !== 31) cArrayString += "\n    ";
+            }
+            cArrayString += "\n};";
+            document.getElementById('cArrayOutput').textContent = cArrayString;
+
+
+            // === 3. Update Charts ===
+            updateChartRenders(temps, voltages, sensitivities, vcc);
+            
+            // 執行單點反查更新
+            updateSingleQuery();
+        }
+
+        function updateChartRenders(temps, voltages, sensitivities, vcc) {
+            if (voltageChart) voltageChart.destroy();
+            const ctxVolt = document.getElementById('voltageChart').getContext('2d');
+            voltageChart = new Chart(ctxVolt, {
+                type: 'line',
+                data: {
+                    labels: temps,
+                    datasets: [{
+                        label: 'ADC 輸入電壓 (V)',
+                        data: voltages,
+                        borderColor: '#22d3ee',
+                        backgroundColor: 'rgba(34, 211, 238, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { 
+                        legend: { labels: { color: '#e5e7eb' } },
+                        title: { display: true, text: '溫度 vs 電壓曲線 (-20~200°C)', color: '#9ca3af' }
+                    },
+                    scales: {
+                        x: { grid: { color: '#374151' }, ticks: { color: '#9ca3af' } },
+                        y: { grid: { color: '#374151' }, ticks: { color: '#9ca3af' }, min: 0, max: vcc }
+                    }
+                }
+            });
+
+            if (sensitivityChart) sensitivityChart.destroy();
+            const ctxSens = document.getElementById('sensitivityChart').getContext('2d');
+            sensitivityChart = new Chart(ctxSens, {
+                type: 'line',
+                data: {
+                    labels: temps,
+                    datasets: [{
+                        label: '靈敏度 (|mV/°C|)',
+                        data: sensitivities,
+                        borderColor: '#f43f5e',
+                        backgroundColor: 'rgba(244, 63, 94, 0.1)',
+                        borderWidth: 2,
+                        fill: true,
+                        pointRadius: 0,
+                        pointHoverRadius: 4
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: { 
+                        legend: { labels: { color: '#e5e7eb' } },
+                        title: { display: true, text: '系統靈敏度 (值越高，ADC越能分辨微小溫差)', color: '#9ca3af' }
+                    },
+                    scales: {
+                        x: { grid: { color: '#374151' }, ticks: { color: '#9ca3af' } },
+                        y: { grid: { color: '#374151' }, ticks: { color: '#9ca3af' } }
+                    }
+                }
+            });
+        }
+
+        function copyToClipboard() {
+            const text = document.getElementById('cArrayOutput').textContent;
+            navigator.clipboard.writeText(text).then(() => {
+                const btn = document.querySelector('button');
+                const origText = btn.innerText;
+                btn.innerText = '已複製!';
+                btn.classList.add('bg-green-600');
+                setTimeout(() => {
+                    btn.innerText = origText;
+                    btn.classList.remove('bg-green-600');
+                }, 2000);
+            });
+        }
+
+        // 綁定事件監聽器
+        document.getElementById('vcc').addEventListener('input', updateData);
+        document.getElementById('rpullup').addEventListener('input', updateData);
+        document.getElementById('ntcType').addEventListener('change', updateData);
+        document.getElementById('queryTemp').addEventListener('input', updateSingleQuery);
+
+        // 初始化
+        window.onload = updateData;
+    </script>
+    <style>
+        /* Custom scrollbar matching dark theme */
+        .scrollbar-thin::-webkit-scrollbar { width: 6px; }
+        .scrollbar-thin::-webkit-scrollbar-track { background: #1f2937; border-radius: 4px;}
+        .scrollbar-thin::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        .scrollbar-thin::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    </style>
+</body>
+</html>

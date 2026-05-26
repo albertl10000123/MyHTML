@@ -1,0 +1,499 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GGR 動力熱管理矩陣 (J.A.R.V.I.S.)</title>
+  
+  <!-- Tailwind CSS Engine -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          animation: {
+            'fade-in': 'fadeIn 0.5s ease-out',
+          },
+          keyframes: {
+            fadeIn: {
+              '0%': { opacity: '0', transform: 'translateY(10px)' },
+              '100%': { opacity: '1', transform: 'translateY(0)' },
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React & ReactDOM -->
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+  
+  <!-- PropTypes (Recharts UMD dependency) -->
+  <script crossorigin src="https://unpkg.com/prop-types@15.8.1/prop-types.min.js"></script>
+
+  <!-- Recharts (Pinned to stable version for UMD compatibility) -->
+  <script crossorigin src="https://unpkg.com/recharts@2.1.12/umd/Recharts.js"></script>
+
+  <!-- Babel for In-browser JSX parsing -->
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-slate-950 text-slate-100 selection:bg-blue-900 selection:text-blue-100 antialiased">
+  <div id="root"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+    const { ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Scatter } = window.Recharts;
+
+    function App() {
+      // ==========================================
+      // 系統全域狀態
+      // ==========================================
+      const [activeModule, setActiveModule] = useState('linear'); // 'linear' | 'ntc'
+
+      // ==========================================
+      // Module A: MMBT5551 線性擬合狀態 (Linear)
+      // ==========================================
+      const [rawData, setRawData] = useState("25, 1.85\n40, 1.76\n60, 1.63\n80, 1.50\n100, 1.38\n120, 1.25");
+      const [linearError, setLinearError] = useState("");
+      const [coeffA, setCoeffA] = useState(-0.00632);
+      const [coeffB, setCoeffB] = useState(2.015);
+      const [vInputLinear, setVInputLinear] = useState(1.65);
+      const [autoSync, setAutoSync] = useState(true);
+
+      // 線性數據解析與回歸計算
+      const linearDataPoints = useMemo(() => {
+        try {
+          const lines = rawData.trim().split('\n');
+          const parsed = lines.map(line => {
+            const [temp, volt] = line.split(/[, \t]+/).map(Number);
+            if (isNaN(temp) || isNaN(volt)) throw new Error("數據格式錯誤");
+            return { temp, volt };
+          });
+          setLinearError("");
+          return parsed.sort((a, b) => a.temp - b.temp);
+        } catch (e) {
+          setLinearError("請確認數據格式：每行一組 '溫度, 電壓'");
+          return [];
+        }
+      }, [rawData]);
+
+      const linearStats = useMemo(() => {
+        if (linearDataPoints.length < 2) return null;
+        const n = linearDataPoints.length;
+        let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0, sumY2 = 0;
+        linearDataPoints.forEach(p => {
+          sumX += p.temp; sumY += p.volt;
+          sumXY += p.temp * p.volt;
+          sumX2 += p.temp * p.temp;
+          sumY2 += p.volt * p.volt;
+        });
+        const slope = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+        const intercept = (sumY - slope * sumX) / n;
+        const num = (n * sumXY - sumX * sumY) ** 2;
+        const den = (n * sumX2 - sumX * sumX) * (n * sumY2 - sumY * sumY);
+        return { a: slope, b: intercept, r2: (num / den).toFixed(4) };
+      }, [linearDataPoints]);
+
+      useEffect(() => {
+        if (autoSync && linearStats) {
+          setCoeffA(linearStats.a);
+          setCoeffB(linearStats.b);
+        }
+      }, [linearStats, autoSync]);
+
+      const linearChartData = useMemo(() => {
+        if (!linearStats || linearDataPoints.length === 0) return [];
+        const minT = Math.min(...linearDataPoints.map(d => d.temp)) - 5;
+        const maxT = Math.max(...linearDataPoints.map(d => d.temp)) + 5;
+        const trendPoints = [];
+        for (let t = minT; t <= maxT; t += (maxT - minT) / 20) {
+          trendPoints.push({ temp: t, trend: linearStats.a * t + linearStats.b });
+        }
+        return [
+          ...linearDataPoints.map(d => ({ ...d, type: 'scatter' })),
+          ...trendPoints.map(d => ({ ...d, type: 'trend' }))
+        ].sort((a, b) => a.temp - b.temp);
+      }, [linearDataPoints, linearStats]);
+
+      const calcLinearTemp = (vInputLinear - coeffB) / coeffA;
+
+      // ==========================================
+      // Module B: NTC 非線性陣列狀態 (NTC)
+      // ==========================================
+      const ADC_MAX = 4095;
+      const V_REF = 3.3;
+      const SHIFT_VALUE = 7;
+      const STEP = 1 << SHIFT_VALUE;
+      
+      const NTC_TABLE = useMemo(() => [
+        195, 195, 195, 195, 195, 195, 195, 195, 195, 178, 
+        161, 145, 128, 111,  95,  78,  61,  45,  28,  11, 
+         -6, -23, -23, -23, -23, -23, -23, -23, -23, -23, 
+        -23, -23, -23
+      ], []);
+
+      const [fwdVoltage, setFwdVoltage] = useState(1.65);
+      const [fwdAdc, setFwdAdc] = useState(2047);
+      const [fwdTemp, setFwdTemp] = useState(0);
+
+      const [revTemp, setRevTemp] = useState(100);
+      const [revVoltage, setRevVoltage] = useState(0);
+      const [revAdc, setRevAdc] = useState(0);
+
+      const calculateForwardNTC = (adcRaw) => {
+        let s16ADCTemp1 = adcRaw >> SHIFT_VALUE;
+        let s16ADCTemp2 = adcRaw - (s16ADCTemp1 << SHIFT_VALUE);
+        if (s16ADCTemp1 >= NTC_TABLE.length - 1) return NTC_TABLE[NTC_TABLE.length - 1];
+        let s32ADCTemp3 = NTC_TABLE[s16ADCTemp1 + 1] - NTC_TABLE[s16ADCTemp1];
+        s32ADCTemp3 = Math.floor((s32ADCTemp3 * s16ADCTemp2) / STEP); 
+        return NTC_TABLE[s16ADCTemp1] + s32ADCTemp3;
+      };
+
+      const handleFwdVoltageChange = (val) => {
+        if (val === '') { setFwdVoltage(''); return; }
+        const v = parseFloat(val);
+        const clampedV = Math.max(0, Math.min(v, V_REF));
+        const adc = Math.round((clampedV / V_REF) * ADC_MAX);
+        setFwdVoltage(clampedV); setFwdAdc(adc); setFwdTemp(calculateForwardNTC(adc));
+      };
+
+      const handleFwdAdcChange = (val) => {
+        if (val === '') { setFwdAdc(''); return; }
+        const adc = parseInt(val, 10);
+        const clampedAdc = Math.max(0, Math.min(adc, ADC_MAX));
+        const v = (clampedAdc / ADC_MAX) * V_REF;
+        setFwdAdc(clampedAdc); setFwdVoltage(v); setFwdTemp(calculateForwardNTC(clampedAdc));
+      };
+
+      const calculateReverseNTC = (targetTemp) => {
+        if (targetTemp >= 195) return { adc: 0, v: 0.0 };
+        if (targetTemp <= -23) return { adc: ADC_MAX, v: V_REF };
+        for (let i = 0; i < NTC_TABLE.length - 1; i++) {
+          let tempHigh = NTC_TABLE[i], tempLow = NTC_TABLE[i + 1];
+          if (targetTemp <= tempHigh && targetTemp >= tempLow) {
+            let deltaTemp = tempLow - tempHigh, adcResidual = 0;
+            if (deltaTemp !== 0) adcResidual = Math.floor(((targetTemp - tempHigh) * STEP) / deltaTemp);
+            let targetAdc = (i << SHIFT_VALUE) + adcResidual;
+            return { adc: targetAdc, v: (targetAdc / ADC_MAX) * V_REF };
+          }
+        }
+        return { adc: 0, v: 0 };
+      };
+
+      const handleRevTempChange = (val) => {
+        if (val === '') { setRevTemp(''); return; }
+        const t = parseInt(val, 10);
+        const clampedT = Math.max(-23, Math.min(t, 195));
+        setRevTemp(clampedT);
+        const res = calculateReverseNTC(clampedT);
+        setRevAdc(res.adc); setRevVoltage(res.v);
+      };
+
+      useEffect(() => {
+        handleFwdVoltageChange(1.65);
+        handleRevTempChange(100);
+      }, []);
+
+      const mapPointNTC = (adc, temp) => ({
+        x: (adc / ADC_MAX) * 100,
+        y: 100 - ((temp - (-25)) / (200 - (-25))) * 100
+      });
+
+      const fwdPoint = mapPointNTC(fwdAdc || 0, fwdTemp);
+      const revPoint = mapPointNTC(revAdc || 0, revTemp || 0);
+
+      // ==========================================
+      // Render Helpers
+      // ==========================================
+      const renderLinearModule = () => (
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            {/* 左側：數據輸入與擬合 */}
+            <div className="lg:col-span-1 space-y-4">
+              <div className="bg-slate-900/80 p-5 rounded-2xl border border-blue-900 shadow-xl relative overflow-hidden backdrop-blur-md">
+                <div className="absolute top-0 left-0 w-1 h-full bg-blue-500"></div>
+                <h2 className="text-sm font-bold text-blue-300 uppercase mb-3 flex items-center">
+                  實驗 Raw Data
+                </h2>
+                <textarea
+                  className="w-full h-40 bg-slate-950 border border-slate-700 rounded-lg p-3 font-mono text-xs text-blue-400 focus:ring-1 focus:ring-blue-500 outline-none resize-none"
+                  value={rawData}
+                  onChange={(e) => setRawData(e.target.value)}
+                  placeholder="25, 1.85..."
+                />
+                {linearError && <p className="text-red-400 text-xs mt-2">{linearError}</p>}
+              </div>
+
+              {linearStats && (
+                <div className="bg-slate-900/80 p-5 rounded-2xl border border-blue-900 shadow-xl backdrop-blur-md">
+                    <p className="text-xs text-slate-400 uppercase font-bold mb-3">回歸擬合結果</p>
+                    <div className="space-y-3 font-mono text-sm">
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <span className="text-slate-500">斜率 (A)</span>
+                        <span className="text-blue-400 font-bold">{linearStats.a.toFixed(6)}</span>
+                      </div>
+                      <div className="flex justify-between items-center border-b border-slate-800 pb-2">
+                        <span className="text-slate-500">截距 (B)</span>
+                        <span className="text-emerald-400 font-bold">{linearStats.b.toFixed(4)}</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-500">線性度 (R²)</span>
+                        <span className={parseFloat(linearStats.r2) > 0.99 ? "text-purple-400 font-bold" : "text-yellow-400 font-bold"}>
+                          {linearStats.r2}
+                        </span>
+                      </div>
+                    </div>
+                </div>
+              )}
+            </div>
+
+            {/* 右側：計算機與圖表 */}
+            <div className="lg:col-span-3 space-y-6">
+              <div className="bg-slate-900/80 rounded-2xl border border-orange-500/30 shadow-2xl overflow-hidden backdrop-blur-md">
+                <div className="bg-orange-900/20 px-6 py-3 border-b border-orange-500/20 flex justify-between items-center">
+                  <h2 className="text-sm font-bold text-orange-400 flex items-center">
+                    即時溫度反推計算機
+                  </h2>
+                  <label className="flex items-center cursor-pointer">
+                    <span className="text-[10px] text-slate-400 mr-2 uppercase font-bold">自動同步擬合</span>
+                    <div className="relative">
+                      <input type="checkbox" className="sr-only" checked={autoSync} onChange={() => setAutoSync(!autoSync)} />
+                      <div className={`block w-8 h-4 rounded-full transition-colors ${autoSync ? 'bg-orange-500' : 'bg-slate-600'}`}></div>
+                      <div className={`dot absolute left-1 top-1 bg-white w-2 h-2 rounded-full transition-transform ${autoSync ? 'transform translate-x-4' : ''}`}></div>
+                    </div>
+                  </label>
+                </div>
+
+                <div className="p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="space-y-4">
+                    <div className={`transition-opacity ${autoSync ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs text-slate-400 font-bold uppercase">覆蓋斜率 A</label>
+                        <span className="text-xs font-mono text-blue-400">{coeffA.toFixed(6)}</span>
+                      </div>
+                      <input type="range" min="-0.01" max="-0.001" step="0.00001" className="w-full h-1 bg-slate-700 rounded-lg appearance-none accent-blue-500" value={coeffA} onChange={(e) => setCoeffA(parseFloat(e.target.value))} />
+                    </div>
+                    <div className={`transition-opacity ${autoSync ? 'opacity-50 pointer-events-none' : 'opacity-100'}`}>
+                      <div className="flex justify-between mb-1">
+                        <label className="text-xs text-slate-400 font-bold uppercase">覆蓋截距 B</label>
+                        <span className="text-xs font-mono text-emerald-400">{coeffB.toFixed(4)}</span>
+                      </div>
+                      <input type="range" min="1.0" max="3.0" step="0.001" className="w-full h-1 bg-slate-700 rounded-lg appearance-none accent-emerald-500" value={coeffB} onChange={(e) => setCoeffB(parseFloat(e.target.value))} />
+                    </div>
+                    <div className="pt-2">
+                      <label className="text-xs text-orange-300 font-bold uppercase block mb-1">ADC 量測電壓 (Vout)</label>
+                      <input type="number" step="0.001" className="w-full bg-slate-950 border border-orange-500/50 rounded p-2 text-xl font-mono text-orange-400 focus:outline-none" value={vInputLinear} onChange={(e) => setVInputLinear(parseFloat(e.target.value))} />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col justify-center items-center bg-slate-950 rounded-xl border border-slate-800 p-4 relative overflow-hidden">
+                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-1 z-10">推估溫度</p>
+                    <div className="flex items-baseline z-10">
+                      <span className="text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-orange-400 to-red-500">
+                        {isNaN(calcLinearTemp) ? "--" : calcLinearTemp.toFixed(1)}
+                      </span>
+                      <span className="text-2xl font-bold text-slate-400 ml-1">℃</span>
+                    </div>
+                    <div className="mt-3 flex space-x-2 z-10">
+                      <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${calcLinearTemp < 80 ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-800 text-slate-600'}`}>NORMAL</div>
+                      <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${(calcLinearTemp >= 80 && calcLinearTemp < 110) ? 'bg-yellow-500/20 text-yellow-400' : 'bg-slate-800 text-slate-600'}`}>WARN</div>
+                      <div className={`px-3 py-1 rounded-full text-[10px] font-bold ${calcLinearTemp >= 110 ? 'bg-red-500/20 text-red-400 animate-pulse' : 'bg-slate-800 text-slate-600'}`}>DERATE</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-slate-900/80 p-5 rounded-2xl border border-slate-800 shadow-xl h-[280px] backdrop-blur-md">
+                <h2 className="text-xs font-bold text-slate-400 uppercase mb-2">線性特性曲線 (Curve Fitting)</h2>
+                <ResponsiveContainer width="100%" height="90%">
+                  <ComposedChart data={linearChartData} margin={{ top: 5, right: 5, bottom: 0, left: -20 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+                    <XAxis type="number" dataKey="temp" stroke="#475569" domain={['dataMin - 5', 'dataMax + 5']} tick={{fontSize: 10}} />
+                    <YAxis type="number" dataKey="volt" stroke="#475569" domain={['auto', 'auto']} tick={{fontSize: 10}} />
+                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', borderColor: '#1e293b' }} itemStyle={{fontSize: '11px'}}/>
+                    <Scatter name="實驗點" dataKey="volt" fill="#3b82f6" />
+                    <Line type="monotone" dataKey="trend" stroke="#f59e0b" strokeWidth={2} dot={false} activeDot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+
+      const renderNtcModule = () => (
+        <div className="space-y-6 animate-fade-in">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            {/* Forward Module */}
+            <div className="bg-slate-900/80 border border-cyan-800/50 rounded-2xl p-6 relative overflow-hidden shadow-xl backdrop-blur-md">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-cyan-600 to-blue-500"></div>
+              <h3 className="text-lg font-semibold mb-2 text-cyan-300">正向模擬 (硬體 ➔ 韌體)</h3>
+              <p className="text-[10px] text-cyan-600 mb-5">輸入端子電壓或 ADC Raw Data，模擬控制器插值算出的溫度。</p>
+              
+              <div className="space-y-5">
+                <div>
+                  <label className="flex justify-between text-xs text-cyan-400 mb-1">
+                    <span>輸入電壓 (V)</span>
+                    <span className="font-mono">{fwdVoltage === '' ? '0.000' : Number(fwdVoltage).toFixed(3)} V</span>
+                  </label>
+                  <div className="flex gap-3 items-center">
+                    <input type="range" min="0" max="3.3" step="0.001" value={fwdVoltage || 0} onChange={(e) => handleFwdVoltageChange(e.target.value)} className="w-full accent-cyan-500 h-1 bg-slate-800 rounded-lg appearance-none" />
+                    <input type="number" min="0" max="3.3" step="0.001" value={fwdVoltage} onChange={(e) => handleFwdVoltageChange(e.target.value)} className="w-20 bg-slate-950 text-cyan-400 border border-cyan-800/50 rounded px-1 py-1 text-xs text-center focus:outline-none" />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="flex justify-between text-xs text-cyan-400 mb-1">
+                    <span>ADC 讀值 (12-bit)</span>
+                    <span className="font-mono">{fwdAdc === '' ? 0 : fwdAdc}</span>
+                  </label>
+                  <div className="flex gap-3 items-center">
+                    <input type="range" min="0" max="4095" step="1" value={fwdAdc || 0} onChange={(e) => handleFwdAdcChange(e.target.value)} className="w-full accent-cyan-500 h-1 bg-slate-800 rounded-lg appearance-none" />
+                    <input type="number" min="0" max="4095" step="1" value={fwdAdc} onChange={(e) => handleFwdAdcChange(e.target.value)} className="w-20 bg-slate-950 text-cyan-400 border border-cyan-800/50 rounded px-1 py-1 text-xs text-center focus:outline-none" />
+                  </div>
+                </div>
+
+                <div className="mt-4 pt-4 border-t border-cyan-900/50 text-center bg-slate-950/50 rounded-lg pb-3">
+                  <span className="text-[10px] text-cyan-600 uppercase">MCU Calculated Temp</span>
+                  <div className="text-4xl font-bold text-white mt-1">
+                    {fwdTemp} <span className="text-lg text-cyan-500">°C</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Reverse Module */}
+            <div className="bg-slate-900/80 border border-emerald-800/50 rounded-2xl p-6 relative overflow-hidden shadow-xl backdrop-blur-md">
+              <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-600 to-teal-500"></div>
+              <h3 className="text-lg font-semibold mb-2 text-emerald-400">逆向推導 (規格 ➔ 硬體)</h3>
+              <p className="text-[10px] text-emerald-600 mb-5">輸入工程保護點規格，反推硬體應注入的觸發電壓與 ADC 門檻。</p>
+
+              <div className="space-y-5">
+                <div>
+                  <label className="flex justify-between text-xs text-emerald-400 mb-1">
+                    <span>目標溫度 (°C)</span>
+                    <span className="font-mono">{revTemp === '' ? 0 : revTemp} °C</span>
+                  </label>
+                  <div className="flex gap-3 items-center">
+                    <input type="range" min="-23" max="195" step="1" value={revTemp || 0} onChange={(e) => handleRevTempChange(e.target.value)} className="w-full accent-emerald-500 h-1 bg-slate-800 rounded-lg appearance-none" />
+                    <input type="number" min="-23" max="195" step="1" value={revTemp} onChange={(e) => handleRevTempChange(e.target.value)} className="w-20 bg-slate-950 text-emerald-400 border border-emerald-800/50 rounded px-1 py-1 text-xs text-center focus:outline-none" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4 mt-2">
+                  <div className="bg-slate-950/50 p-3 rounded-lg text-center border border-emerald-900/30">
+                    <span className="text-[10px] text-emerald-600 uppercase block mb-1">Target ADC</span>
+                    <span className="text-2xl font-bold text-white">{revAdc}</span>
+                  </div>
+                  <div className="bg-slate-950/50 p-3 rounded-lg text-center border border-emerald-900/30">
+                    <span className="text-[10px] text-emerald-600 uppercase block mb-1">Target Voltage</span>
+                    <span className="text-2xl font-bold text-white">{revVoltage === '' ? '0.000' : Number(revVoltage).toFixed(3)}<span className="text-sm text-emerald-500 ml-1">V</span></span>
+                  </div>
+                </div>
+                
+                <div className="bg-emerald-950/20 p-3 rounded border border-emerald-900/30">
+                   <p className="text-[10px] text-emerald-400/80 leading-relaxed font-mono">
+                     MIL HIL 驗證指令: 注入 {revVoltage === '' ? '0.000' : Number(revVoltage).toFixed(3)}V 以觸發 {revTemp === '' ? 0 : revTemp}°C 保護邏輯。
+                   </p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Charting Module (SVG) */}
+          <div className="w-full bg-slate-900/80 border border-slate-800 rounded-2xl p-6 relative shadow-xl backdrop-blur-md">
+            <h3 className="text-xs font-semibold mb-4 text-slate-400 uppercase">NTC Non-Linear Matrix Profile</h3>
+            <div className="w-full h-56 relative">
+              <div className="absolute left-0 top-0 h-[calc(100%-1.5rem)] w-8">
+                {[200, 100, 0, -25].map(t => (
+                  <span key={t} className="absolute left-0 text-[9px] text-slate-500 -translate-y-1/2" style={{ top: `${100 - ((t - (-25)) / (200 - (-25))) * 100}%` }}>{t}°C</span>
+                ))}
+              </div>
+              <div className="absolute bottom-0 left-8 w-[calc(100%-2rem)] flex justify-between text-[9px] text-slate-500">
+                <span>ADC 0 (0V)</span>
+                <span>ADC 2048 (1.65V)</span>
+                <span>ADC 4095 (3.3V)</span>
+              </div>
+              <div className="absolute top-0 left-8 w-[calc(100%-2rem)] h-[calc(100%-1.5rem)] border-l border-b border-slate-700/50">
+                <div className="absolute w-full h-full">
+                  {[200, 100, 0, -25].map(t => (
+                    <div key={t} className="absolute w-full h-[1px] bg-slate-800/80" style={{ top: `${100 - ((t - (-25)) / (200 - (-25))) * 100}%` }}></div>
+                  ))}
+                </div>
+                <svg className="w-full h-full overflow-visible" preserveAspectRatio="none">
+                  <polyline 
+                    points={NTC_TABLE.map((t, i) => `${mapPointNTC(i * STEP, t).x},${mapPointNTC(i * STEP, t).y}`).join(' ')}
+                    fill="none" stroke="#334155" strokeWidth="1" strokeDasharray="4 4"
+                  />
+                  {NTC_TABLE.map((temp, index) => {
+                    const pt = mapPointNTC(index * STEP, temp);
+                    return <circle key={`node-${index}`} cx={`${pt.x}%`} cy={`${pt.y}%`} r="1.5" fill="#64748b" className="opacity-80"/>
+                  })}
+                  <circle cx={`${fwdPoint.x}%`} cy={`${fwdPoint.y}%`} r="5" fill="#22d3ee" className="animate-pulse shadow-[0_0_10px_rgba(34,211,238,1)]"/>
+                  <text x={`${fwdPoint.x}%`} y={`${fwdPoint.y - 6}%`} fill="#22d3ee" fontSize="10" textAnchor="middle" className="font-bold">FWD</text>
+                  <circle cx={`${revPoint.x}%`} cy={`${revPoint.y}%`} r="5" fill="#34d399" className="animate-pulse shadow-[0_0_10px_rgba(52,211,153,1)]"/>
+                  <text x={`${revPoint.x}%`} y={`${revPoint.y + 10}%`} fill="#34d399" fontSize="10" textAnchor="middle" className="font-bold">REV</text>
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+
+      return (
+        <div className="min-h-screen p-4 md:p-8 font-sans">
+          <div className="max-w-6xl mx-auto">
+            
+            {/* Unified Header */}
+            <header className="mb-8 border-b border-slate-800 pb-5 flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="h-8 w-8 bg-blue-600/20 rounded flex items-center justify-center border border-blue-500/50">
+                    <span className="text-blue-400 font-black text-lg">J</span>
+                  </div>
+                  <h1 className="text-2xl md:text-3xl font-black text-slate-200 tracking-tight">
+                    動力熱管理矩陣 <span className="text-blue-500">.</span>
+                  </h1>
+                </div>
+                <p className="text-slate-500 text-xs font-mono ml-11 uppercase tracking-widest">
+                  GGR Powertrain Thermal Architecture
+                </p>
+              </div>
+              
+              {/* Module Selector */}
+              <div className="flex bg-slate-900 rounded-lg p-1 border border-slate-800 ml-11 md:ml-0">
+                <button 
+                  onClick={() => setActiveModule('linear')}
+                  className={`px-4 py-2 rounded-md text-xs font-bold transition-all ${activeModule === 'linear' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  線性陣列 (MMBT5551)
+                </button>
+                <button 
+                  onClick={() => setActiveModule('ntc')}
+                  className={`px-4 py-2 rounded-md text-xs font-bold transition-all ${activeModule === 'ntc' ? 'bg-cyan-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-200'}`}
+                >
+                  非線性矩陣 (NTC)
+                </button>
+              </div>
+            </header>
+
+            {/* Render Active Module */}
+            <main className="min-h-[600px]">
+              {activeModule === 'linear' ? renderLinearModule() : renderNtcModule()}
+            </main>
+
+            <footer className="mt-12 text-center text-slate-700 text-[10px] font-mono uppercase tracking-widest">
+              Systems Online // All protocols functioning normally.
+            </footer>
+          </div>
+        </div>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(<App />);
+  </script>
+</body>
+</html>
