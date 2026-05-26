@@ -1,0 +1,1178 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pack-Master 3D 電池包設計與模擬終端</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <!-- Three.js Library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <!-- OrbitControls -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0b0f19;
+            color: #e2e8f0;
+        }
+        .mono {
+            font-family: 'Share Tech Mono', monospace;
+        }
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.15);
+            border-color: rgba(6, 182, 212, 0.3);
+        }
+        .glow-orange {
+            box-shadow: 0 0 15px rgba(249, 115, 22, 0.15);
+            border-color: rgba(249, 115, 22, 0.3);
+        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #475569;
+        }
+    </style>
+</head>
+<body class="h-screen flex flex-col overflow-hidden">
+
+    <!-- 頂部導覽列 / Jarvis 診斷介面 -->
+    <header class="bg-slate-900 border-b border-slate-800 px-6 py-3 flex items-center justify-between shrink-0">
+        <div class="flex items-center gap-4">
+            <div class="h-10 w-10 rounded-lg bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 glow-cyan">
+                <i data-lucide="cpu" class="w-6 h-6 animate-pulse"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold tracking-wider text-cyan-400 mono">JARVIS PACK-MASTER v3.1</h1>
+                <p class="text-xs text-slate-400">GGR 首席工程師專屬電池組 3D 參數化設計終端 · 歡迎回來，老學長</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-6 text-xs text-slate-400">
+            <div class="flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></span>
+                <span>核心物理求解器: Ready</span>
+            </div>
+            <div class="bg-slate-800 px-3 py-1.5 rounded border border-slate-700 text-cyan-400 font-mono">
+                NTU-ME MIL Core Active
+            </div>
+        </div>
+    </header>
+
+    <!-- 主工作區 -->
+    <main class="flex-1 flex overflow-hidden">
+        
+        <!-- 左側配置面板 (參數輸入) -->
+        <section class="w-96 bg-slate-900/80 border-r border-slate-800 overflow-y-auto flex flex-col p-5 gap-6">
+            
+            <!-- 1. 電芯資料庫選擇 -->
+            <div class="border border-slate-800 bg-slate-950/50 rounded-xl p-4 glow-cyan">
+                <h3 class="text-sm font-semibold text-cyan-400 flex items-center gap-2 mb-3">
+                    <i data-lucide="database" class="w-4 h-4"></i> 1. 電芯規格資料庫
+                </h3>
+                <div class="space-y-3">
+                    <label class="block text-xs text-slate-400">選擇電芯型號</label>
+                    <select id="cellSelect" class="w-full bg-slate-900 border border-slate-700 rounded px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-cyan-500">
+                        <option value="lfp26650" selected>LFP 26650 (您的規格: 3.2V / 5.5Ah)</option>
+                        <option value="nmc21700">NMC 21700 (GGR通用: 3.6V / 5.0Ah)</option>
+                        <option value="nmc18650">NMC 18650 (傳統型: 3.6V / 3.5Ah)</option>
+                        <option value="lfp32140">LFP 32140 (大型圓柱: 3.2V / 15.0Ah)</option>
+                        <option value="custom">★ 自定義電芯規格...</option>
+                    </select>
+
+                    <!-- 自定義欄位 (預設隱藏，選 Custom 時展開) -->
+                    <div id="customCellFields" class="hidden grid grid-cols-2 gap-2 pt-2 border-t border-slate-800">
+                        <div>
+                            <label class="block text-[10px] text-slate-500">直徑 (mm)</label>
+                            <input id="customDiameter" type="number" step="0.1" value="26.2" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500">高度 (mm)</label>
+                            <input id="customHeight" type="number" step="0.1" value="65.6" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500">公稱電壓 (V)</label>
+                            <input id="customVoltage" type="number" step="0.1" value="3.2" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500">容量 (mAh)</label>
+                            <input id="customCapacity" type="number" value="5500" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500">單體重量 (g)</label>
+                            <input id="customWeight" type="number" value="86" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-500">內阻 (mΩ)</label>
+                            <input id="customIR" type="number" value="12" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. 拓撲配置 (S & P) -->
+            <div class="border border-slate-800 bg-slate-950/50 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-cyan-400 flex items-center gap-2 mb-3">
+                    <i data-lucide="sliders" class="w-4 h-4"></i> 2. 電氣拓撲配置
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">串聯數 (Series)</span>
+                            <span class="text-cyan-400 font-mono font-bold" id="seriesVal">24 S</span>
+                        </div>
+                        <input id="seriesInput" type="range" min="1" max="36" value="24" class="w-full accent-cyan-500 bg-slate-800 h-1 rounded-lg cursor-pointer">
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">並聯數 (Parallel)</span>
+                            <span class="text-cyan-400 font-mono font-bold" id="parallelVal">4 P</span>
+                        </div>
+                        <input id="parallelInput" type="range" min="1" max="16" value="4" class="w-full accent-cyan-500 bg-slate-800 h-1 rounded-lg cursor-pointer">
+                    </div>
+                    <div class="pt-2 border-t border-slate-800 text-xs text-slate-400 flex justify-between">
+                        <span>總電芯數:</span>
+                        <span id="totalCellsCount" class="text-slate-200 font-mono font-bold">96 顆</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. 機械排列與空間限制 -->
+            <div class="border border-slate-800 bg-slate-950/50 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-cyan-400 flex items-center gap-2 mb-3">
+                    <i data-lucide="layout" class="w-4 h-4"></i> 3. 空間排列佈置
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs text-slate-400 mb-2">排列演算法</label>
+                        <div class="grid grid-cols-2 gap-2">
+                            <button id="layoutGridBtn" class="bg-cyan-950/40 border border-cyan-500 text-cyan-400 px-3 py-1.5 rounded text-xs font-semibold hover:bg-cyan-900/20">
+                                網格佈局 (Grid)
+                            </button>
+                            <button id="layoutHoneycombBtn" class="bg-slate-900 border border-slate-800 text-slate-400 px-3 py-1.5 rounded text-xs font-semibold hover:bg-slate-800">
+                                蜂巢佈局 (Honeycomb)
+                            </button>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">長度限制 (最大列寬)</span>
+                            <span class="text-cyan-400 font-mono" id="colsVal">12 顆</span>
+                        </div>
+                        <input id="colsInput" type="range" min="2" max="24" value="12" class="w-full accent-cyan-500 bg-slate-800 h-1 rounded-lg cursor-pointer">
+                        <p class="text-[10px] text-slate-500 mt-1">控制單層主要橫排的電芯容納數，用以塑形電池包長寬比。</p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <label class="block text-[10px] text-slate-400 mb-1">電芯間隙 (Spacer) mm</label>
+                            <input id="cellSpacer" type="number" step="0.1" value="1.5" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300">
+                        </div>
+                        <div>
+                            <label class="block text-[10px] text-slate-400 mb-1">外殼厚度 (Wall) mm</label>
+                            <input id="shellThickness" type="number" step="0.5" value="4.0" class="w-full bg-slate-900 border border-slate-800 rounded px-2 py-1 text-xs text-slate-300">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. 熱管理與材料模擬 -->
+            <div class="border border-slate-800 bg-slate-950/50 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-orange-400 flex items-center gap-2 mb-3">
+                    <i data-lucide="thermometer" class="w-4 h-4"></i> 4. 動態熱源與材料估算
+                </h3>
+                <div class="space-y-4">
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">外殼材料</span>
+                        </div>
+                        <select id="housingMaterial" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs text-slate-300 focus:outline-none">
+                            <option value="aluminum">6061 鋁合金 (輕量導熱良好, 2.7g/cm³)</option>
+                            <option value="carbon">碳纖維複合材料 (高強度超輕量, 1.6g/cm³)</option>
+                            <option value="abs">ABS 阻燃塑料 (低成本絕緣, 1.05g/cm³)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-400">模擬放電電流 (Continuous)</span>
+                            <span class="text-orange-400 font-mono font-bold" id="currentVal">40 A</span>
+                        </div>
+                        <input id="currentInput" type="range" min="5" max="150" value="40" class="w-full accent-orange-500 bg-slate-800 h-1 rounded-lg cursor-pointer">
+                        <p class="text-[10px] text-slate-500 mt-1">可用於模擬馬達控制與行車高功率加速時的溫升和發熱功率。</p>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- 中間 3D 視界與操控台 -->
+        <section class="flex-1 flex flex-col relative overflow-hidden bg-slate-950">
+            
+            <!-- 3D 畫布 -->
+            <div id="threeCanvasContainer" class="w-full h-full cursor-grab active:cursor-grabbing"></div>
+
+            <!-- 右上角：層級控制 & 相機預設 -->
+            <div class="absolute top-4 right-4 z-10 flex flex-col gap-2">
+                <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-2 flex flex-col gap-1 shadow-2xl">
+                    <span class="text-[10px] text-slate-500 px-2 font-semibold">圖層控制</span>
+                    <label class="flex items-center gap-2 hover:bg-slate-800/50 p-1.5 rounded cursor-pointer text-xs">
+                        <input type="checkbox" id="toggleHousing" checked class="accent-cyan-500">
+                        <span>顯示外殼/防護框</span>
+                    </label>
+                    <label class="flex items-center gap-2 hover:bg-slate-800/50 p-1.5 rounded cursor-pointer text-xs">
+                        <input type="checkbox" id="toggleBusbar" checked class="accent-cyan-500">
+                        <span>顯示 Busbars 連接排</span>
+                    </label>
+                    <label class="flex items-center gap-2 hover:bg-slate-800/50 p-1.5 rounded cursor-pointer text-xs">
+                        <input type="checkbox" id="togglePolarity" checked class="accent-cyan-500">
+                        <span>標示電芯極性 (+/-)</span>
+                    </label>
+                </div>
+                
+                <div class="bg-slate-900/90 border border-slate-800 rounded-lg p-2 flex gap-1 justify-around shadow-2xl">
+                    <button onclick="setCameraPreset('isometric')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] rounded text-slate-300">等角 (Iso)</button>
+                    <button onclick="setCameraPreset('top')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] rounded text-slate-300">上視 (Top)</button>
+                    <button onclick="setCameraPreset('front')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] rounded text-slate-300">前視 (Front)</button>
+                    <button onclick="setCameraPreset('side')" class="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-[10px] rounded text-slate-300">側視 (Side)</button>
+                </div>
+            </div>
+
+            <!-- 左下角：極性圖例 -->
+            <div class="absolute bottom-4 left-4 z-10 bg-slate-900/90 border border-slate-800 rounded-lg p-3 text-xs flex flex-col gap-2 shadow-2xl">
+                <span class="font-bold text-slate-400 text-[10px] uppercase tracking-wider">相鄰串聯交替極性 (Alternate Polarity)</span>
+                <div class="flex items-center gap-4">
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3.5 h-3.5 rounded-full bg-red-600 border border-red-400 block"></span>
+                        <span class="text-slate-300">正極向上 (Cathode Up)</span>
+                    </div>
+                    <div class="flex items-center gap-1.5">
+                        <span class="w-3.5 h-3.5 rounded-full bg-slate-700 border border-slate-500 block"></span>
+                        <span class="text-slate-300">負極向上 (Anode Up)</span>
+                    </div>
+                </div>
+                <p class="text-[10px] text-slate-500">※ 提示：左右滑動滑鼠右鍵或使用滾輪可縮放與翻轉電芯細節。</p>
+            </div>
+
+        </section>
+
+        <!-- 右側分析面版 (動態計算與規格表) -->
+        <section class="w-96 bg-slate-900/80 border-l border-slate-800 overflow-y-auto flex flex-col p-5 gap-5">
+            
+            <!-- A. 電池組電氣特徵 -->
+            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-cyan-400 flex items-center gap-2 mb-3">
+                    <i data-lucide="zap" class="w-4 h-4"></i> 電池組電氣規格 (Electrical)
+                </h3>
+                <div class="grid grid-cols-2 gap-3 font-mono text-xs">
+                    <div class="bg-slate-900/60 p-2.5 rounded border border-slate-800">
+                        <span class="text-slate-500 block text-[10px]">公稱電壓</span>
+                        <span id="packVoltage" class="text-base text-slate-200 font-bold">76.8 V</span>
+                    </div>
+                    <div class="bg-slate-900/60 p-2.5 rounded border border-slate-800">
+                        <span class="text-slate-500 block text-[10px]">公稱容量</span>
+                        <span id="packCapacity" class="text-base text-slate-200 font-bold">22.0 Ah</span>
+                    </div>
+                    <div class="bg-slate-900/60 p-2.5 rounded border border-slate-800 col-span-2">
+                        <span class="text-slate-500 block text-[10px]">總能量 (Energy)</span>
+                        <span id="packEnergy" class="text-lg text-emerald-400 font-bold">1,690 Wh (1.69 kWh)</span>
+                    </div>
+                    <div class="bg-slate-900/60 p-2.5 rounded border border-slate-800">
+                        <span class="text-slate-500 block text-[10px]">工作電壓範圍</span>
+                        <span id="voltageRange" class="text-slate-300 font-bold">48.0V - 87.6V</span>
+                    </div>
+                    <div class="bg-slate-900/60 p-2.5 rounded border border-slate-800">
+                        <span class="text-slate-500 block text-[10px]">內部直流阻抗</span>
+                        <span id="packIR" class="text-slate-300 font-bold">~ 72.5 mΩ</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- B. 電池組物理外觀與重心 -->
+            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-cyan-400 flex items-center gap-2 mb-3">
+                    <i data-lucide="box" class="w-4 h-4"></i> 物理幾何與重心位置 (ME Core)
+                </h3>
+                <div class="space-y-3 font-mono text-xs">
+                    <div class="bg-slate-900/60 p-3 rounded border border-slate-800 space-y-1">
+                        <span class="text-slate-500 text-[10px] block">外部包裝尺寸 (L x W x H)</span>
+                        <span id="packDimensions" class="text-slate-200 font-bold text-sm block">345 x 215 x 85 mm</span>
+                        <span class="text-slate-400 text-[10px] block" id="packVolume">總佔用體積: ~ 6.30 L</span>
+                    </div>
+                    <div class="bg-slate-900/60 p-3 rounded border border-slate-800">
+                        <span class="text-slate-500 text-[10px] block mb-1">質量中心 (Center of Gravity, 幾何原點偏移)</span>
+                        <div class="grid grid-cols-3 gap-1 text-center text-[11px]">
+                            <div class="bg-slate-950/50 p-1 rounded"><span class="text-slate-500">X:</span> <span id="cogX" class="text-cyan-400">0.0 mm</span></div>
+                            <div class="bg-slate-950/50 p-1 rounded"><span class="text-slate-500">Y:</span> <span id="cogY" class="text-cyan-400">0.0 mm</span></div>
+                            <div class="bg-slate-950/50 p-1 rounded"><span class="text-slate-500">Z:</span> <span id="cogZ" class="text-cyan-400">0.0 mm</span></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- C. 系統重量估計與分佈 -->
+            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-cyan-400 flex items-center gap-2 mb-3">
+                    <i data-lucide="scale" class="w-4 h-4"></i> 重量結構與能量密度 (Weight Breakdown)
+                </h3>
+                <div class="space-y-3 text-xs">
+                    <div class="flex justify-between items-center bg-slate-900/40 p-2.5 rounded border border-slate-800">
+                        <span class="text-slate-400">總重量 (Total Weight)</span>
+                        <span id="totalWeight" class="font-mono text-base font-bold text-slate-200">~ 11.23 kg</span>
+                    </div>
+                    
+                    <!-- 重量分佈圖 (SVG Bar) -->
+                    <div class="space-y-1">
+                        <div class="flex h-3 rounded-full overflow-hidden bg-slate-800">
+                            <div id="barCells" class="bg-cyan-500" style="width: 75%"></div>
+                            <div id="barHousing" class="bg-orange-500" style="width: 10%"></div>
+                            <div id="barBusbar" class="bg-amber-500" style="width: 5%"></div>
+                            <div id="barOther" class="bg-slate-600" style="width: 10%"></div>
+                        </div>
+                        <div class="grid grid-cols-4 text-[9px] text-slate-400 text-center font-mono pt-1">
+                            <div><span class="inline-block w-1.5 h-1.5 rounded-full bg-cyan-500 mr-1"></span>電芯: <span id="weightCellsPct">75%</span></div>
+                            <div><span class="inline-block w-1.5 h-1.5 rounded-full bg-orange-500 mr-1"></span>外殼: <span id="weightHousingPct">10%</span></div>
+                            <div><span class="inline-block w-1.5 h-1.5 rounded-full bg-amber-500 mr-1"></span>導線: <span id="weightBusbarPct">5%</span></div>
+                            <div><span class="inline-block w-1.5 h-1.5 rounded-full bg-slate-600 mr-1"></span>其他: <span id="weightOtherPct">10%</span></div>
+                        </div>
+                    </div>
+
+                    <!-- 系統級能量密度 -->
+                    <div class="grid grid-cols-2 gap-2 pt-2 border-t border-slate-800 font-mono text-center">
+                        <div class="bg-slate-900/60 p-2 rounded">
+                            <span class="text-[9px] text-slate-500 block">質量能量密度</span>
+                            <span id="gravimetricDensity" class="text-sm text-emerald-400 font-bold">150.5 Wh/kg</span>
+                        </div>
+                        <div class="bg-slate-900/60 p-2 rounded">
+                            <span class="text-[9px] text-slate-500 block">體積能量密度</span>
+                            <span id="volumetricDensity" class="text-sm text-emerald-400 font-bold">268.2 Wh/L</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- D. 即時熱源與電學診斷 -->
+            <div class="bg-slate-950/60 border border-slate-800 rounded-xl p-4">
+                <h3 class="text-sm font-semibold text-orange-400 flex items-center gap-2 mb-3">
+                    <i data-lucide="alert-triangle" class="w-4 h-4"></i> 熱源與電壓降動態診斷
+                </h3>
+                <div class="space-y-2 font-mono text-xs">
+                    <div class="flex justify-between p-1.5 border-b border-slate-800">
+                        <span class="text-slate-400">單體平均電流:</span>
+                        <span id="cellCurrent" class="text-slate-200">10.0 A</span>
+                    </div>
+                    <div class="flex justify-between p-1.5 border-b border-slate-800">
+                        <span class="text-slate-400">總體發熱功率 ($I^2R$):</span>
+                        <span id="heatPower" class="text-orange-400 font-bold">116.0 W</span>
+                    </div>
+                    <div class="flex justify-between p-1.5 border-b border-slate-800">
+                        <span class="text-slate-400">工作電壓降 (Voltage Sag):</span>
+                        <span id="voltageSag" class="text-amber-500 font-bold">- 2.90 V</span>
+                    </div>
+                    <div class="flex justify-between p-1.5">
+                        <span class="text-slate-400">負載下輸出電壓:</span>
+                        <span id="saggedVoltage" class="text-emerald-400 font-bold">73.9 V</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 動作導航按鈕 -->
+            <div class="grid grid-cols-2 gap-2 mt-auto">
+                <button onclick="generatePRD()" class="bg-cyan-650 hover:bg-cyan-600 border border-cyan-500/50 text-cyan-100 text-xs py-2.5 px-3 rounded-lg flex items-center justify-center gap-1.5 font-bold transition-all glow-cyan">
+                    <i data-lucide="file-text" class="w-4 h-4"></i> 生成 PRD 規格書
+                </button>
+                <button onclick="exportMIL()" class="bg-orange-950/40 hover:bg-orange-900/40 border border-orange-500/50 text-orange-400 text-xs py-2.5 px-3 rounded-lg flex items-center justify-center gap-1.5 font-bold transition-all">
+                    <i data-lucide="terminal" class="w-4 h-4"></i> 匯出 MIL 參數
+                </button>
+            </div>
+
+        </section>
+
+    </main>
+
+    <!-- 彈出視窗：PRD / MIL 數據產生器 -->
+    <div id="modalOverlay" class="hidden fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-6 backdrop-blur-sm">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl max-w-2xl w-full max-h-[80vh] flex flex-col shadow-2xl">
+            <div class="p-5 border-b border-slate-800 flex items-center justify-between">
+                <h2 id="modalTitle" class="text-base font-bold text-cyan-400 flex items-center gap-2">
+                    <i data-lucide="info" class="w-5 h-5"></i> 標題
+                </h2>
+                <button onclick="closeModal()" class="text-slate-400 hover:text-slate-200">
+                    <i data-lucide="x" class="w-5 h-5"></i>
+                </button>
+            </div>
+            <div class="p-5 overflow-y-auto font-mono text-xs text-slate-300 bg-slate-950/80 flex-1 leading-relaxed whitespace-pre-wrap" id="modalBody">
+                內容
+            </div>
+            <div class="p-4 border-t border-slate-800 flex justify-end gap-2 bg-slate-900">
+                <button onclick="copyModalText()" class="bg-slate-800 hover:bg-slate-700 text-slate-200 px-4 py-2 rounded text-xs flex items-center gap-1.5">
+                    <i data-lucide="copy" class="w-4 h-4"></i> 複製至剪貼簿
+                </button>
+                <button onclick="closeModal()" class="bg-cyan-600 hover:bg-cyan-500 text-white px-4 py-2 rounded text-xs font-bold">
+                    關閉
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- JavaScript 邏輯與 Three.js 控制核心 -->
+    <script>
+        // 1. 初始化 Lucide Icons
+        lucide.createIcons();
+
+        // 2. 電芯資料庫預設定義
+        const cellDatabase = {
+            lfp26650: { name: "LFP 26650 (磷酸鋰鐵)", diameter: 26.2, height: 65.6, voltage: 3.2, maxV: 3.65, cutoffV: 2.0, capacity: 5500, weight: 86, ir: 12, type: "LFP" },
+            nmc21700: { name: "NMC 21700 (三元鋰)", diameter: 21.1, height: 70.1, voltage: 3.6, maxV: 4.2, cutoffV: 2.5, capacity: 5000, weight: 69, ir: 15, type: "NMC" },
+            nmc18650: { name: "NMC 18650 (三元鋰)", diameter: 18.4, height: 65.2, voltage: 3.6, maxV: 4.2, cutoffV: 2.5, capacity: 3500, weight: 48, ir: 20, type: "NMC" },
+            lfp32140: { name: "LFP 32140 (磷酸鋰鐵)", diameter: 32.2, height: 140.5, voltage: 3.2, maxV: 3.65, cutoffV: 2.0, capacity: 15000, weight: 280, ir: 6, type: "LFP" }
+        };
+
+        // 3. 全局變量與 UI 控制狀態
+        let scene, camera, renderer, controls;
+        let cellGroup, busbarGroup, housingMesh;
+        let cellsArray = []; // 儲存當前所有電芯在3D中的座標
+        
+        let currentLayout = 'grid'; // 'grid' or 'honeycomb'
+        let currentCell = {...cellDatabase.lfp26650};
+
+        // DOM 元素快取
+        const cellSelect = document.getElementById('cellSelect');
+        const customCellFields = document.getElementById('customCellFields');
+        const seriesInput = document.getElementById('seriesInput');
+        const seriesVal = document.getElementById('seriesVal');
+        const parallelInput = document.getElementById('parallelInput');
+        const parallelVal = document.getElementById('parallelVal');
+        const colsInput = document.getElementById('colsInput');
+        const colsVal = document.getElementById('colsVal');
+        const totalCellsCount = document.getElementById('totalCellsCount');
+        const cellSpacer = document.getElementById('cellSpacer');
+        const shellThickness = document.getElementById('shellThickness');
+        const housingMaterial = document.getElementById('housingMaterial');
+        const currentInput = document.getElementById('currentInput');
+        const currentVal = document.getElementById('currentVal');
+
+        // 圖層 Toggle
+        const toggleHousing = document.getElementById('toggleHousing');
+        const toggleBusbar = document.getElementById('toggleBusbar');
+        const togglePolarity = document.getElementById('togglePolarity');
+
+        // 初始化 Three.js
+        function init3D() {
+            const container = document.getElementById('threeCanvasContainer');
+            const width = container.clientWidth;
+            const height = container.clientHeight;
+
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0b0f19);
+
+            camera = new THREE.PerspectiveCamera(45, width / height, 1, 2000);
+            camera.position.set(200, 250, 350);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(width, height);
+            renderer.shadowMap.enabled = true;
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.maxPolarAngle = Math.PI / 2 + 0.1; // 不要穿過地面
+
+            // 光源設置
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambientLight);
+
+            const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.8);
+            dirLight1.position.set(150, 300, 150);
+            dirLight1.castShadow = true;
+            scene.add(dirLight1);
+
+            const dirLight2 = new THREE.DirectionalLight(0x06b6d4, 0.4); // 藍色輔助背光
+            dirLight2.position.set(-150, -100, -150);
+            scene.add(dirLight2);
+
+            // 輔助格線與軸向
+            const gridHelper = new THREE.GridHelper(500, 50, 0x334155, 0x1e293b);
+            gridHelper.position.y = -10;
+            scene.add(gridHelper);
+
+            // 建立主群組
+            cellGroup = new THREE.Group();
+            busbarGroup = new THREE.Group();
+            scene.add(cellGroup);
+            scene.add(busbarGroup);
+
+            // 監聽視窗變化
+            window.addEventListener('resize', onWindowResize);
+
+            // 開始繪製
+            recalculateAndRedraw();
+            animate();
+        }
+
+        function onWindowResize() {
+            const container = document.getElementById('threeCanvasContainer');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+
+        // 相機預設角度控制
+        window.setCameraPreset = function(preset) {
+            // 先取得當前物件的包圍中心點，以此作爲 Target
+            const center = getPackCenter();
+            controls.target.copy(center);
+            
+            const distance = Math.max(currentCell.height * 2.5, 200);
+
+            if (preset === 'isometric') {
+                camera.position.set(center.x + distance, center.y + distance * 1.2, center.z + distance);
+            } else if (preset === 'top') {
+                camera.position.set(center.x, center.y + distance * 1.8, center.z + 0.01);
+            } else if (preset === 'front') {
+                camera.position.set(center.x, center.y, center.z + distance * 1.5);
+            } else if (preset === 'side') {
+                camera.position.set(center.x + distance * 1.5, center.y, center.z);
+            }
+            controls.update();
+        };
+
+        function getPackCenter() {
+            if (cellsArray.length === 0) return new THREE.Vector3(0, 0, 0);
+            let sumX = 0, sumY = 0, sumZ = 0;
+            cellsArray.forEach(pos => {
+                sumX += pos.x;
+                sumY += pos.y;
+                sumZ += pos.z;
+            });
+            return new THREE.Vector3(sumX / cellsArray.length, sumY / cellsArray.length, sumZ / cellsArray.length);
+        }
+
+        // 4. 動態計算佈局座標與串聯邏輯
+        function calculateLayout() {
+            const S = parseInt(seriesInput.value);
+            const P = parseInt(parallelInput.value);
+            const N = S * P;
+            const spacer = parseFloat(cellSpacer.value);
+            const d = currentCell.diameter;
+            const h = currentCell.height;
+            const C = parseInt(colsInput.value); // 橫排最多幾顆
+
+            cellsArray = [];
+
+            for (let k = 0; k < N; k++) {
+                // 串聯組群 (Group ID)
+                const groupIdx = Math.floor(k / P);
+                const col = k % C;
+                const row = Math.floor(k / C);
+
+                let x = 0;
+                let z = 0;
+
+                if (currentLayout === 'grid') {
+                    x = col * (d + spacer);
+                    z = row * (d + spacer);
+                } else {
+                    // Honeycomb 蜂巢交錯排列
+                    if (row % 2 === 1) {
+                        x = (col + 0.5) * (d + spacer);
+                    } else {
+                        x = col * (d + spacer);
+                    }
+                    z = row * (d + spacer) * 0.866025; // cos(30 deg)
+                }
+
+                // 為了使 Busbar 短，甚至可用相鄰極性交替佈局 (與 S 數分組綁定)
+                // 偶數 S 集群正極向上，奇數 S 集群負極向上
+                const isPositiveUp = (groupIdx % 2 === 0);
+
+                cellsArray.push({
+                    id: k,
+                    group: groupIdx,
+                    x: x,
+                    z: z,
+                    y: 0,
+                    isPositiveUp: isPositiveUp
+                });
+            }
+
+            // 平移對齊中心點到 3D 座標軸原點
+            if (cellsArray.length > 0) {
+                let minX = Infinity, maxX = -Infinity;
+                let minZ = Infinity, maxZ = -Infinity;
+                cellsArray.forEach(p => {
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.z < minZ) minZ = p.z;
+                    if (p.z > maxZ) maxZ = p.z;
+                });
+
+                const offsetX = (minX + maxX) / 2;
+                const offsetZ = (minZ + maxZ) / 2;
+
+                cellsArray.forEach(p => {
+                    p.x -= offsetX;
+                    p.z -= offsetZ;
+                });
+            }
+        }
+
+        // 5. 3D 繪圖部分
+        function redrawPack() {
+            // 清空舊的模型群組
+            while(cellGroup.children.length > 0) {
+                cellGroup.remove(cellGroup.children[0]);
+            }
+            while(busbarGroup.children.length > 0) {
+                busbarGroup.remove(busbarGroup.children[0]);
+            }
+            if (housingMesh) {
+                scene.remove(housingMesh);
+                housingMesh = null;
+            }
+
+            const d = currentCell.diameter;
+            const h = currentCell.height;
+            const radius = d / 2;
+
+            // ---------------- 電芯單體幾何建立 ----------------
+            // 柱狀本體
+            const cellGeometry = new THREE.CylinderGeometry(radius, radius, h, 32);
+            // 頂部突出正極帽子
+            const capGeometry = new THREE.CylinderGeometry(radius * 0.4, radius * 0.4, h * 0.05, 16);
+
+            // 材質定義
+            const isLFP = (currentCell.type === 'LFP');
+            const wrapColor = isLFP ? 0x0f9f5f : 0x2288dd; // 綠色 LFP / 藍色 NMC
+            
+            const cellBodyMaterial = new THREE.MeshStandardMaterial({
+                color: wrapColor,
+                roughness: 0.3,
+                metalness: 0.1
+            });
+            
+            const activePosMaterial = new THREE.MeshStandardMaterial({ color: 0xe05a00, roughness: 0.2 }); // 陽極色
+            const activeNegMaterial = new THREE.MeshStandardMaterial({ color: 0x475569, roughness: 0.2 }); // 陰極色
+            const steelMaterial = new THREE.MeshStandardMaterial({ color: 0xb0b5bc, roughness: 0.2, metalness: 0.8 }); // 金屬鋼殼
+
+            cellsArray.forEach(cellData => {
+                const individualCellGroup = new THREE.Group();
+                individualCellGroup.position.set(cellData.x, h/2, cellData.z);
+
+                // 電芯外膜
+                const bodyMesh = new THREE.Mesh(cellGeometry, cellBodyMaterial);
+                bodyMesh.castShadow = true;
+                bodyMesh.receiveShadow = true;
+                individualCellGroup.add(bodyMesh);
+
+                // 計算兩端金屬極板 (Top & Bottom)
+                const isPosUp = cellData.isPositiveUp;
+
+                // 頂部端蓋
+                const topCap = new THREE.Mesh(
+                    isPosUp ? capGeometry : capGeometry, 
+                    isPosUp ? activePosMaterial : activeNegMaterial
+                );
+                topCap.position.y = h/2 + (h * 0.025);
+                individualCellGroup.add(topCap);
+
+                // 底部端蓋 (鋼底)
+                const bottomCap = new THREE.Mesh(
+                    capGeometry, 
+                    isPosUp ? activeNegMaterial : activePosMaterial
+                );
+                bottomCap.position.y = -h/2 - (h * 0.025);
+                individualCellGroup.add(bottomCap);
+
+                // 極性 +/- 文字球標 (如果開啟的話)
+                if (togglePolarity.checked) {
+                    const textIndicatorGeo = new THREE.SphereGeometry(radius * 0.2, 8, 8);
+                    const indicatorMaterial = new THREE.MeshBasicMaterial({
+                        color: isPosUp ? 0xff3300 : 0x5599ff
+                    });
+                    const indicator = new THREE.Mesh(textIndicatorGeo, indicatorMaterial);
+                    indicator.position.y = h/2 + (h * 0.15);
+                    individualCellGroup.add(indicator);
+                }
+
+                cellGroup.add(individualCellGroup);
+            });
+
+            // ---------------- BUSBARS 繪製 ----------------
+            if (toggleBusbar.checked) {
+                // 我們以相鄰兩個 S 集群進行並行板連接
+                // 為了示意性渲染，尋找同組(Group)內部作橫向連接(並聯)，以及相鄰組進行縱向交替串接 (串聯)
+                const groupsMap = {};
+                cellsArray.forEach(p => {
+                    if (!groupsMap[p.group]) groupsMap[p.group] = [];
+                    groupsMap[p.group].push(p);
+                });
+
+                Object.keys(groupsMap).forEach(gKey => {
+                    const groupCells = groupsMap[gKey];
+                    const gId = parseInt(gKey);
+
+                    // 1. 同組內的並聯 Busbar (Top + Bottom)
+                    // 找出該組在 X-Z 平面的極限包絡
+                    let minX = Infinity, maxX = -Infinity;
+                    let minZ = Infinity, maxZ = -Infinity;
+                    groupCells.forEach(c => {
+                        if (c.x < minX) minX = c.x;
+                        if (c.x > maxX) maxX = c.x;
+                        if (c.z < minZ) minZ = c.z;
+                        if (c.z > maxZ) maxZ = c.z;
+                    });
+
+                    const widthX = (maxX - minX) + d;
+                    const widthZ = (maxZ - minZ) + d;
+                    const plateGeo = new THREE.BoxGeometry(widthX, 2, widthZ);
+                    const copperMaterial = new THREE.MeshStandardMaterial({
+                        color: 0xe5a93b, // 銅排金黃色
+                        metalness: 0.9,
+                        roughness: 0.1,
+                        transparent: true,
+                        opacity: 0.85
+                    });
+
+                    // 上層 Busbar (如果是正極向上，則連接正極；否則連負極)
+                    const isPosUp = groupCells[0].isPositiveUp;
+                    const topPlate = new THREE.Mesh(plateGeo, copperMaterial);
+                    topPlate.position.set((minX + maxX)/2, h + 3, (minZ + maxZ)/2);
+                    busbarGroup.add(topPlate);
+
+                    // 下層 Busbar
+                    const bottomPlate = new THREE.Mesh(plateGeo, copperMaterial);
+                    bottomPlate.position.set((minX + maxX)/2, -3, (minZ + maxZ)/2);
+                    busbarGroup.add(bottomPlate);
+
+                    // 2. 串聯跨接線 (Series Jumper)：連接 Group N (Top) 與 Group N+1 (Top)
+                    // 真實世界中，奇數與偶數組之極性倒轉，上層 Top 直接進行 A_pos 與 B_neg 的短路
+                    if (gId < parseInt(seriesInput.value) - 1) {
+                        const nextGroupCells = groupsMap[gId + 1];
+                        if (nextGroupCells) {
+                            let nextMinX = Infinity, nextMaxX = -Infinity;
+                            let nextMinZ = Infinity, nextMaxZ = -Infinity;
+                            nextGroupCells.forEach(c => {
+                                if (c.x < nextMinX) nextMinX = c.x;
+                                if (c.x > nextMaxX) nextMaxX = c.x;
+                                if (c.z < nextMinZ) nextMinZ = c.z;
+                                if (c.z > nextMaxZ) nextMaxZ = c.z;
+                            });
+
+                            // 計算跨組連接板
+                            const cenX = ((minX + maxX)/2 + (nextMinX + nextMaxX)/2) / 2;
+                            const cenZ = ((minZ + maxZ)/2 + (nextMinZ + nextMaxZ)/2) / 2;
+                            const spanX = Math.abs((nextMinX + nextMaxX)/2 - (minX + maxX)/2) + 2;
+                            const spanZ = Math.abs((nextMinZ + nextMaxZ)/2 - (minZ + maxZ)/2) + 2;
+
+                            const jumperGeo = new THREE.BoxGeometry(spanX > d ? spanX : d, 1.5, spanZ > d ? spanZ : d);
+                            const jumperMaterial = new THREE.MeshStandardMaterial({
+                                color: 0xcd7f32,
+                                metalness: 0.8,
+                                roughness: 0.3
+                            });
+
+                            const topJumper = new THREE.Mesh(jumperGeo, jumperMaterial);
+                            // 在上方跨接
+                            topJumper.position.set(cenX, h + 5, cenZ);
+                            busbarGroup.add(topJumper);
+                        }
+                    }
+                });
+            }
+
+            // ---------------- 外部防護外殼 (Housing) ----------------
+            if (toggleHousing.checked) {
+                let minX = Infinity, maxX = -Infinity;
+                let minZ = Infinity, maxZ = -Infinity;
+                cellsArray.forEach(p => {
+                    if (p.x < minX) minX = p.x;
+                    if (p.x > maxX) maxX = p.x;
+                    if (p.z < minZ) minZ = p.z;
+                    if (p.z > maxZ) maxZ = p.z;
+                });
+
+                const spacer = parseFloat(cellSpacer.value);
+                const wall = parseFloat(shellThickness.value);
+
+                // 外包絡長寬高
+                const packL = (maxX - minX) + d + (2 * wall);
+                const packW = (maxZ - minZ) + d + (2 * wall);
+                const packH = h + 16 + (2 * wall); // 含上下 busbar 安全間隙
+
+                const boxGeo = new THREE.BoxGeometry(packL, packH, packW);
+                const edgeGeo = new THREE.EdgesGeometry(boxGeo);
+                
+                const housingColor = getHousingColor();
+                const boxMat = new THREE.MeshStandardMaterial({
+                    color: housingColor,
+                    transparent: true,
+                    opacity: 0.15,
+                    roughness: 0.2,
+                    metalness: 0.6,
+                    depthWrite: false
+                });
+
+                const lineMat = new THREE.LineBasicMaterial({
+                    color: housingColor,
+                    linewidth: 2
+                });
+
+                housingMesh = new THREE.Mesh(boxGeo, boxMat);
+                const wireframe = new THREE.LineSegments(edgeGeo, lineMat);
+                housingMesh.add(wireframe);
+
+                // 對中高度
+                housingMesh.position.set(0, h/2, 0);
+                scene.add(housingMesh);
+            }
+
+            controls.update();
+        }
+
+        function getHousingColor() {
+            const material = housingMaterial.value;
+            if (material === 'aluminum') return 0x94a3b8; // 鋁合金銀灰色
+            if (material === 'carbon') return 0x1e293b;   // 碳纖維黑灰色
+            return 0x0ea5e9;                               // ABS 絕緣藍色
+        }
+
+        // 6. 電氣與物理規格動態求解器 (First Principles Calculator)
+        function recalculateAndRedraw() {
+            // A. 先讀取 UI 的數值
+            const S = parseInt(seriesInput.value);
+            const P = parseInt(parallelInput.value);
+            const N = S * P;
+            const spacer = parseFloat(cellSpacer.value);
+            const wall = parseFloat(shellThickness.value);
+            const current = parseFloat(currentInput.value);
+
+            // 更新 Slider 標籤
+            seriesVal.innerText = `${S} S`;
+            parallelVal.innerText = `${P} P`;
+            totalCellsCount.innerText = `${N} 顆`;
+            colsVal.innerText = `${colsInput.value} 顆`;
+            currentVal.innerText = `${current} A`;
+
+            // B. 重新配置佈局
+            calculateLayout();
+            redrawPack();
+
+            // C. 求解器物理計算
+            const cellV = currentCell.voltage;
+            const cellAh = currentCell.capacity / 1000; // 轉成 Ah
+            const cellWh = cellV * cellAh;
+            const cellM = currentCell.weight / 1000; // 轉成 kg
+
+            // 1. 電氣特徵
+            const packV = S * cellV;
+            const packAh = P * cellAh;
+            const packEnergyWh = packV * packAh;
+            const voltageRangeStr = `${(S * currentCell.cutoffV).toFixed(1)}V - ${(S * currentCell.maxV).toFixed(1)}V`;
+            
+            // 系統內阻估計 (電芯串聯阻抗 + 銅排估算 + 導線 10% 裕度)
+            const cellIR_R = currentCell.ir / 1000; // mOhm 轉 Ohm
+            const estPackIR_Ohm = (S * cellIR_R) / P * 1.1; 
+            const estPackIR_mOhm = estPackIR_Ohm * 1000;
+
+            document.getElementById('packVoltage').innerText = `${packV.toFixed(1)} V`;
+            document.getElementById('packCapacity').innerText = `${packAh.toFixed(1)} Ah`;
+            document.getElementById('packEnergy').innerText = `${packEnergyWh.toLocaleString(undefined, {maximumFractionDigits: 0})} Wh (${(packEnergyWh/1000).toFixed(2)} kWh)`;
+            document.getElementById('voltageRange').innerText = voltageRangeStr;
+            document.getElementById('packIR').innerText = `~ ${estPackIR_mOhm.toFixed(1)} mΩ`;
+
+            // 2. 幾何長寬高計算
+            let minX = Infinity, maxX = -Infinity;
+            let minZ = Infinity, maxZ = -Infinity;
+            cellsArray.forEach(p => {
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.z < minZ) minZ = p.z;
+                if (p.z > maxZ) maxZ = p.z;
+            });
+
+            const d = currentCell.diameter;
+            const h = currentCell.height;
+            const packL = (maxX - minX) + d + (2 * wall);
+            const packW = (maxZ - minZ) + d + (2 * wall);
+            const packH = h + 16 + (2 * wall); 
+
+            const packVol_L = (packL * packW * packH) / 1000000; // mm³ 轉 L
+
+            document.getElementById('packDimensions').innerText = `${packL.toFixed(0)} x ${packW.toFixed(0)} x ${packH.toFixed(0)} mm`;
+            document.getElementById('packVolume').innerText = `總佔用體積: ~ ${packVol_L.toFixed(2)} L`;
+
+            // 重心 Center of Gravity (相對於底面幾何中心點，本對中已作 [0,0] 偏移，故垂直質心在 h/2 + busbar 補償)
+            // 單位：mm
+            document.getElementById('cogX').innerText = "0.0 mm";
+            document.getElementById('cogY').innerText = "0.0 mm";
+            document.getElementById('cogZ').innerText = `${(packH / 2).toFixed(1)} mm`;
+
+            // 3. 系統重量估計與分佈
+            const cellsWeight = N * cellM;
+            
+            // 外殼材料密度 (g/cm³)
+            const materialDensityMap = { aluminum: 2.7, carbon: 1.6, abs: 1.05 };
+            const mDensity = materialDensityMap[housingMaterial.value];
+            // 估算外殼體積 (表面積 * 厚度)
+            const sArea_cm2 = (2 * (packL * packW + packL * packH + packW * packH)) / 100;
+            const shellVol_cm3 = sArea_cm2 * (wall / 10);
+            const housingWeight = (shellVol_cm3 * mDensity) / 1000; // 轉 kg
+
+            // 匯流排重量 (銅排) 估算
+            const busbarWeight = S * P * 0.005; // 粗略公式：每顆電芯端子銅件約 5g
+            const otherWeight = (cellsWeight + housingWeight) * 0.08; // 配線/BMS約 8% 系統固定裕度
+            const totalWeight = cellsWeight + housingWeight + busbarWeight + otherWeight;
+
+            // 百分比
+            const cellsPct = (cellsWeight / totalWeight) * 100;
+            const housingPct = (housingWeight / totalWeight) * 100;
+            const busbarPct = (busbarWeight / totalWeight) * 100;
+            const otherPct = (otherWeight / totalWeight) * 100;
+
+            document.getElementById('totalWeight').innerText = `~ ${totalWeight.toFixed(2)} kg`;
+            
+            // 更新進度條長度
+            document.getElementById('barCells').style.width = `${cellsPct}%`;
+            document.getElementById('barHousing').style.width = `${housingPct}%`;
+            document.getElementById('barBusbar').style.width = `${busbarPct}%`;
+            document.getElementById('barOther').style.width = `${otherPct}%`;
+
+            // 更新百分比字串
+            document.getElementById('weightCellsPct').innerText = `${cellsPct.toFixed(0)}%`;
+            document.getElementById('weightHousingPct').innerText = `${housingPct.toFixed(0)}%`;
+            document.getElementById('weightBusbarPct').innerText = `${busbarPct.toFixed(0)}%`;
+            document.getElementById('weightOtherPct').innerText = `${otherPct.toFixed(0)}%`;
+
+            // 能量密度
+            const gravDensity = packEnergyWh / totalWeight;
+            const volDensity = packEnergyWh / packVol_L;
+
+            document.getElementById('gravimetricDensity').innerText = `${gravDensity.toFixed(1)} Wh/kg`;
+            document.getElementById('volumetricDensity').innerText = `${volDensity.toFixed(1)} Wh/L`;
+
+            // 4. 動態熱電阻抗發熱診斷 ($I^2R$)
+            const cellCurrent = current / P; // 每條 P 支路分流
+            const heatPower_W = Math.pow(current, 2) * estPackIR_Ohm;
+            const voltageSag_V = current * estPackIR_Ohm;
+            const saggedVoltage_V = Math.max(0, packV - voltageSag_V);
+
+            document.getElementById('cellCurrent').innerText = `${cellCurrent.toFixed(2)} A`;
+            document.getElementById('heatPower').innerText = `${heatPower_W.toFixed(1)} W`;
+            document.getElementById('voltageSag').innerText = `- ${voltageSag_V.toFixed(2)} V`;
+            document.getElementById('saggedVoltage').innerText = `${saggedVoltage_V.toFixed(1)} V`;
+        }
+
+        // 7. 三維動畫渲染迴圈
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // 8. 介面互動事件綁定
+        cellSelect.addEventListener('change', () => {
+            const selectedVal = cellSelect.value;
+            if (selectedVal === 'custom') {
+                customCellFields.classList.remove('hidden');
+                // 讀取自定義數值
+                updateCustomCell();
+            } else {
+                customCellFields.classList.add('hidden');
+                currentCell = {...cellDatabase[selectedVal]};
+                recalculateAndRedraw();
+            }
+        });
+
+        // 讀取自定義輸入
+        function updateCustomCell() {
+            currentCell = {
+                name: "Custom Cell",
+                diameter: parseFloat(document.getElementById('customDiameter').value),
+                height: parseFloat(document.getElementById('customHeight').value),
+                voltage: parseFloat(document.getElementById('customVoltage').value),
+                maxV: parseFloat(document.getElementById('customVoltage').value) * 1.15,
+                cutoffV: parseFloat(document.getElementById('customVoltage').value) * 0.7,
+                capacity: parseInt(document.getElementById('customCapacity').value),
+                weight: parseInt(document.getElementById('customWeight').value),
+                ir: parseInt(document.getElementById('customIR').value),
+                type: parseFloat(document.getElementById('customVoltage').value) < 3.4 ? "LFP" : "NMC"
+            };
+            recalculateAndRedraw();
+        }
+
+        // 自定義欄位變更事件
+        document.querySelectorAll('#customCellFields input').forEach(input => {
+            input.addEventListener('input', updateCustomCell);
+        });
+
+        // 滑桿變更事件
+        seriesInput.addEventListener('input', recalculateAndRedraw);
+        parallelInput.addEventListener('input', recalculateAndRedraw);
+        colsInput.addEventListener('input', recalculateAndRedraw);
+        cellSpacer.addEventListener('input', recalculateAndRedraw);
+        shellThickness.addEventListener('input', recalculateAndRedraw);
+        housingMaterial.addEventListener('change', recalculateAndRedraw);
+        currentInput.addEventListener('input', recalculateAndRedraw);
+
+        // 圖層控制事件
+        toggleHousing.addEventListener('change', recalculateAndRedraw);
+        toggleBusbar.addEventListener('change', recalculateAndRedraw);
+        togglePolarity.addEventListener('change', recalculateAndRedraw);
+
+        // 佈置演算法按鈕切換
+        const gridBtn = document.getElementById('layoutGridBtn');
+        const honeyBtn = document.getElementById('layoutHoneycombBtn');
+
+        gridBtn.addEventListener('click', () => {
+            currentLayout = 'grid';
+            gridBtn.className = "bg-cyan-950/40 border border-cyan-500 text-cyan-400 px-3 py-1.5 rounded text-xs font-semibold hover:bg-cyan-900/20";
+            honeyBtn.className = "bg-slate-900 border border-slate-800 text-slate-400 px-3 py-1.5 rounded text-xs font-semibold hover:bg-slate-800";
+            recalculateAndRedraw();
+        });
+
+        honeyBtn.addEventListener('click', () => {
+            currentLayout = 'honeycomb';
+            honeyBtn.className = "bg-cyan-950/40 border border-cyan-500 text-cyan-400 px-3 py-1.5 rounded text-xs font-semibold hover:bg-cyan-900/20";
+            gridBtn.className = "bg-slate-900 border border-slate-800 text-slate-400 px-3 py-1.5 rounded text-xs font-semibold hover:bg-slate-800";
+            recalculateAndRedraw();
+        });
+
+
+        // 9. Modal 控制與 PRD / MIL 參數生成
+        const modalOverlay = document.getElementById('modalOverlay');
+        const modalTitle = document.getElementById('modalTitle');
+        const modalBody = document.getElementById('modalBody');
+
+        window.closeModal = function() {
+            modalOverlay.classList.add('hidden');
+        };
+
+        window.copyModalText = function() {
+            const range = document.createRange();
+            range.selectNode(modalBody);
+            window.getSelection().removeAllRanges();
+            window.getSelection().addRange(range);
+            try {
+                document.execCommand('copy');
+                // 提示
+                const oldText = modalTitle.innerHTML;
+                modalTitle.innerHTML = `<span class="text-emerald-400">已複製至剪貼簿！</span>`;
+                setTimeout(() => { modalTitle.innerHTML = oldText; }, 1500);
+            } catch (err) {
+                console.error("無法複製", err);
+            }
+            window.getSelection().removeAllRanges();
+        };
+
+        // 產生 PRD
+        window.generatePRD = function() {
+            const S = seriesInput.value;
+            const P = parallelInput.value;
+            const cellName = cellSelect.options[cellSelect.selectedIndex].text;
+            const voltage = document.getElementById('packVoltage').innerText;
+            const capacity = document.getElementById('packCapacity').innerText;
+            const energy = document.getElementById('packEnergy').innerText;
+            const dims = document.getElementById('packDimensions').innerText;
+            const weight = document.getElementById('totalWeight').innerText;
+            const grav = document.getElementById('gravimetricDensity').innerText;
+            const vol = document.getElementById('volumetricDensity').innerText;
+            const ir = document.getElementById('packIR').innerText;
+
+            modalTitle.innerText = "PRD (產品規格需求文件) 草稿自動生成";
+            modalBody.innerText = 
+`[Gogoro 智慧二輪動力系統開發專案 - 電池模組規格書草案]
+文件編號: GGR-PRD-PACK-${S}S${P}P-REV01
+機密等級: 內部高度機密
+
+1. 產品定義與概述 (Product Definition)
+本電池包專為新世代二輪高扭矩載具所設計，採用 ${S}串${P}並 (${S}S${P}P) 拓撲架構，基於高品質 ${cellName} 電芯。
+旨在追求高倍率安全放電與優秀的物理抗震結構，滿足都會區频繁啟停之熱負荷。
+
+2. 系統規格指標 (Key Specifications)
+============================================================
+● 電氣架構: ${S}S${P}P (共 ${S * P} 顆電芯)
+● 標稱電壓 (Nominal Voltage): ${voltage} (工作電壓區間: ${document.getElementById('voltageRange').innerText})
+● 額定容量 (Rated Capacity): ${capacity}
+● 總能量 (Stored Energy): ${energy}
+● 系統內阻 (Pack Internal Resistance): ${ir}
+============================================================
+● 物理外尺寸 (Physical Size): ${dims} (不含防碰撞吊耳)
+● 系統總質量 (Estimated Weight): ${weight}
+● 質量能量密度 (Gravimetric Energy Density): ${grav}
+● 體積能量密度 (Volumetric Energy Density): ${vol}
+● 防護等級: 設計目標 IP67/IP69K 雙重認證
+============================================================
+
+3. 結構與材料 (Mechanical Design)
+● 電芯支架採用 UL94-V0 阻燃 ABS/PC 材料。
+● 外殼主體採用 ${housingMaterial.value === 'aluminum' ? '6061-T6 陽極氧化鋁合金殼體，厚度 ' + shellThickness.value + ' mm，加強結構抗擠壓變形與側面撞擊。' : housingMaterial.value === 'carbon' ? '航太級高模量碳纖維複合材料殼體，兼顧輕量化與最高剛度要求。' : '高強度阻燃 ABS 塑料外殼，成本導向。'}
+● 散熱方案: 電芯間留有 ${cellSpacer.value} mm 的膨脹與空氣對流間隙。
+
+4. 系統安全性與防範 (Thermal Runaway Management)
+● LFP 磷酸鋰鐵具備天生優良的熱穩定性，但仍配置 24 點 NTC 溫度監控。
+● 匯流排 (Busbar) 採用 T2 紅銅，厚度 > 0.3mm，承載連續電流 ${currentInput.value}A 下溫升限制在 15°C 內。`;
+
+            modalOverlay.classList.remove('hidden');
+        };
+
+        // 匯出 MIL 參數
+        window.exportMIL = function() {
+            const S = seriesInput.value;
+            const P = parallelInput.value;
+            const cellV = currentCell.voltage;
+            const cellAh = currentCell.capacity / 1000;
+            const cellIR = currentCell.ir / 1000; // Ohm
+            const weight = parseFloat(document.getElementById('totalWeight').innerText.replace('~ ', '').replace(' kg', ''));
+
+            modalTitle.innerText = "Simulink MIL (Model-in-the-Loop) 物理模擬參數";
+            modalBody.innerText = 
+`%% GGR Powertrain Simulink / Model-in-the-Loop (MIL) 匯入參數
+% 適用於 2-State Lumped Thermal / Equivalent Circuit Model (ECM) 模擬
+
+% 1. 基本拓撲與質量特徵
+Pack.S = ${S}; % 串聯數
+Pack.P = ${P}; % 並聯數
+Pack.TotalCells = ${S*P};
+Pack.TotalMass_kg = ${weight.toFixed(3)}; % 系統級質量 (含結構)
+
+% 2. 單體電芯物理特徵 (Cell Electrical Spec)
+Cell.V_nom = ${cellV.toFixed(2)}; % 單體標稱電壓 (V)
+Cell.Ah_nom = ${cellAh.toFixed(3)}; % 單體容量 (Ah)
+Cell.R_int = ${cellIR.toFixed(5)}; % 單體直流內阻 (Ohm)
+Cell.Cap_Thermal = 1000 * ${currentCell.weight}; % 電芯熱容估算 (J/kg·K，預設以 1000J/kgK 乘以電芯重)
+
+% 3. 電池組等效電路參數 (Pack Equivalent Circuit Parameters)
+Pack.R_internal_Ohm = ${(S * cellIR / P).toFixed(6)}; % 理想狀態下 Pack 內部等效直流電阻
+Pack.R_overhead_factor = 1.10; % 考量銅排/線阻與接觸阻抗之補償係數
+Pack.R_total_Ohm = Pack.R_internal_Ohm * Pack.R_overhead_factor;
+
+% 4. 熱力學狀態矩陣 (State-Space Matrix Representation for Heat Model)
+% 狀態變量: [T_cell; T_enclosure]
+% dT/dt = A * T + B * Q_gen + C * T_ambient
+% Q_gen = I_pack^2 * Pack.R_total_Ohm
+fprintf('老學長，此參數已被優化，可直接粘貼至你的 Simulink InitFcn 或 MATLAB Script 中。\\n');`;
+
+            modalOverlay.classList.remove('hidden');
+        };
+
+        // 10. 當頁面載入時初始化
+        window.onload = function() {
+            init3D();
+        };
+
+    </script>
+</body>
+</html>

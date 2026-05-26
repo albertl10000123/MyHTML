@@ -1,0 +1,448 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Project RE-125: 4.5kW ISG 啟動發電機工程儀表板</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Chosen Palette: Warm Neutrals (Stone/Amber) -->
+    <!-- Application Structure Plan: The SPA uses a dashboard structure, dividing the engineering report into logical, interactive modules: 1. High-level Summary (Hero) 2. Interactive Performance Modes (Tabs) 3. Dynamic T-N Curve (Chart.js) 4. Physical & Material Specs (Grid). This structure allows engineers to quickly grasp the macroscopic capabilities (power, efficiency) before drilling down into microscopic physical constraints (winding, geometry, materials). -->
+    <!-- Visualization & Content Choices: 1. Key Metrics -> Goal: Inform -> Method: Grid of KPI cards -> Justification: Quick scanning of core specs. 2. Cranking vs Gen Modes -> Goal: Compare/Change -> Method: Interactive JS Tabs -> Justification: The ISG has two distinct physical states; tabs prevent information overload. 3. T-N Curve -> Goal: Relationships/Trends -> Method: Chart.js Line Chart -> Justification: Visualizes torque requirements across RPM ranges dynamically. 4. Geometry/Materials -> Goal: Organize -> Method: Structured Tailwind Cards -> Justification: Clean, hierarchical display of static data. -> Confirming NO SVG/Mermaid used. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 40vh;
+            max-height: 400px;
+            min-height: 300px;
+        }
+        .mode-btn.active {
+            background-color: #f59e0b;
+            color: white;
+            border-color: #f59e0b;
+        }
+        .mode-content {
+            display: none;
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        .mode-content.active {
+            display: block;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        body {
+            background-color: #fafaf9;
+            color: #292524;
+        }
+    </style>
+</head>
+<body class="antialiased selection:bg-amber-200 selection:text-amber-900">
+
+    <nav class="sticky top-0 z-50 bg-stone-100/90 backdrop-blur-md border-b border-stone-200 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded bg-amber-500 text-white flex items-center justify-center font-bold text-xl">⚡</div>
+                    <span class="font-bold text-xl tracking-tight text-stone-800">Project RE-125 <span class="font-light text-stone-500">| ISG CAE</span></span>
+                </div>
+                <div class="hidden md:flex space-x-8 text-sm font-medium text-stone-600">
+                    <a href="#overview" class="hover:text-amber-600 transition-colors">系統概覽</a>
+                    <a href="#performance" class="hover:text-amber-600 transition-colors">性能解析</a>
+                    <a href="#tn-curve" class="hover:text-amber-600 transition-colors">T-N 特性曲線</a>
+                    <a href="#specs" class="hover:text-amber-600 transition-colors">物理與材料規格</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-12">
+
+        <section id="overview" class="pt-4">
+            <div class="mb-6">
+                <h1 class="text-3xl font-extrabold text-stone-900 tracking-tight">4.5kW 高功率整合式啟動發電機 (ISG)</h1>
+                <p class="mt-2 text-lg text-stone-600 max-w-3xl">針對 76V LFP 電池系統與 125cc Atkinson 引擎優化設計。採用外轉子永磁同步馬達 (OR-PMSM) 架構，結合飛輪設計以達到極致的空間與重量利用率。</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div class="bg-white p-6 rounded-xl border border-stone-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="text-stone-400 text-sm font-semibold mb-1 uppercase tracking-wider">極限發電功率</div>
+                    <div class="text-4xl font-black text-amber-600">4.56 <span class="text-xl font-medium text-stone-500">kW</span></div>
+                    <div class="text-xs text-stone-500 mt-2">60 A_DC 持續回充電流</div>
+                </div>
+                <div class="bg-white p-6 rounded-xl border border-stone-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="text-stone-400 text-sm font-semibold mb-1 uppercase tracking-wider">系統效率</div>
+                    <div class="text-4xl font-black text-amber-600">≥ 91.8 <span class="text-xl font-medium text-stone-500">%</span></div>
+                    <div class="text-xs text-stone-500 mt-2">@ 4500 rpm 節能工作點</div>
+                </div>
+                <div class="bg-white p-6 rounded-xl border border-stone-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="text-stone-400 text-sm font-semibold mb-1 uppercase tracking-wider">槽極數配比</div>
+                    <div class="text-4xl font-black text-amber-600">18S12P</div>
+                    <div class="text-xs text-stone-500 mt-2">分散式集中繞組 (Kw=0.966)</div>
+                </div>
+                <div class="bg-white p-6 rounded-xl border border-stone-200 shadow-sm hover:shadow-md transition-shadow">
+                    <div class="text-stone-400 text-sm font-semibold mb-1 uppercase tracking-wider">峰值反電動勢</div>
+                    <div class="text-4xl font-black text-amber-600">57.7 <span class="text-xl font-medium text-stone-500">V</span></div>
+                    <div class="text-xs text-stone-500 mt-2">低於母線 76V，免弱磁控制</div>
+                </div>
+            </div>
+        </section>
+
+        <section id="performance" class="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div class="p-6 md:p-8 border-b border-stone-100 bg-stone-50/50">
+                <h2 class="text-2xl font-bold text-stone-800">工況性能解析</h2>
+                <p class="text-sm text-stone-500 mt-1">此區塊提供 ISG 在兩種極端物理狀態下的電磁性能表現。請點擊下方按鈕切換工況模式。</p>
+                
+                <div class="mt-6 flex space-x-2">
+                    <button class="mode-btn active px-6 py-2 rounded-full border-2 border-stone-300 text-sm font-bold text-stone-600 hover:border-amber-500 transition-colors focus:outline-none" data-target="cranking">
+                        ⚙️ 啟動工況 (Cranking)
+                    </button>
+                    <button class="mode-btn px-6 py-2 rounded-full border-2 border-stone-300 text-sm font-bold text-stone-600 hover:border-amber-500 transition-colors focus:outline-none" data-target="generation">
+                        ⚡ 發電工況 (Generation)
+                    </button>
+                </div>
+            </div>
+
+            <div class="p-6 md:p-8">
+                <div id="cranking" class="mode-content active">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div class="md:col-span-2 space-y-4">
+                            <h3 class="text-xl font-bold text-stone-800 border-l-4 border-amber-500 pl-3">瞬態極限輸出 (0 ~ 300 rpm)</h3>
+                            <p class="text-stone-600 leading-relaxed">目標為克服 125cc Atkinson 單缸高壓縮比（約 11.5:1）的壓縮上死點阻力。系統在此階段會注入龐大的瞬間相電流，以產生足夠的爆發扭力強行帶動曲軸。</p>
+                            <ul class="space-y-3 mt-4 text-stone-700">
+                                <li class="flex items-center gap-2">
+                                    <span class="text-amber-500 font-black">▸</span>
+                                    <span><strong>峰值扭力：</strong> 18.0 Nm</span>
+                                </li>
+                                <li class="flex items-center gap-2">
+                                    <span class="text-amber-500 font-black">▸</span>
+                                    <span><strong>最大啟動相電流：</strong> 110.4 A_rms</span>
+                                </li>
+                                <li class="flex items-center gap-2">
+                                    <span class="text-amber-500 font-black">▸</span>
+                                    <span><strong>扭力常數 (Kt)：</strong> 0.163 Nm/A_rms</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="bg-amber-50 rounded-xl p-5 border border-amber-100 flex flex-col justify-center">
+                            <div class="text-amber-800 font-bold mb-2">🔥 熱限制警告</div>
+                            <p class="text-sm text-amber-700">Cranking 時間上限為 <strong>1.5 秒</strong>。瞬態電流密度高達 16.27 A/mm²。歸功於 3P 並聯架構，每條支路電流得以分擔，瞬態溫升在安全範圍內。</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="generation" class="mode-content">
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                        <div class="md:col-span-2 space-y-4">
+                            <h3 class="text-xl font-bold text-stone-800 border-l-4 border-amber-500 pl-3">定速持續輸出 (4000 ~ 5000 rpm)</h3>
+                            <p class="text-stone-600 leading-relaxed">在 76V 母線電壓下，輸出穩定 60A DC 回充電流。設計關鍵在於最高轉速 5000 rpm 時的反電動勢 (57.7V) 仍低於母線電壓，完全避免被動二極體整流的失控導通風險。</p>
+                            <ul class="space-y-3 mt-4 text-stone-700">
+                                <li class="flex items-center gap-2">
+                                    <span class="text-amber-500 font-black">▸</span>
+                                    <span><strong>輸出功率：</strong> 4.56 kW (60A DC)</span>
+                                </li>
+                                <li class="flex items-center gap-2">
+                                    <span class="text-amber-500 font-black">▸</span>
+                                    <span><strong>持續發電相電流：</strong> 49.0 A_rms</span>
+                                </li>
+                                <li class="flex items-center gap-2">
+                                    <span class="text-amber-500 font-black">▸</span>
+                                    <span><strong>反電動勢常數 (Ke)：</strong> 0.078 V/rad/s</span>
+                                </li>
+                            </ul>
+                        </div>
+                        <div class="bg-stone-100 rounded-xl p-5 border border-stone-200 flex flex-col justify-center">
+                            <div class="text-stone-800 font-bold mb-2">⚡ 反電動勢分析</div>
+                            <ul class="text-sm text-stone-600 space-y-2">
+                                <li><strong>@ 4000 rpm:</strong> 32.7 V (rms) / 46.2 V (pk)</li>
+                                <li><strong>@ 5000 rpm:</strong> 40.8 V (rms) / 57.7 V (pk)</li>
+                            </ul>
+                            <p class="text-xs text-stone-500 mt-3 mt-auto">無需耗費任何 Id 弱磁電流，採用 MOSFET 同步整流確保高效率。</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tn-curve">
+            <h2 class="text-2xl font-bold text-stone-800 mb-2">扭矩-轉速 (T-N) 物理特性曲線</h2>
+            <p class="text-sm text-stone-500 mb-6">此圖表展示 ISG 系統在啟動、怠速與發電三個階段的扭力變化。利用互動式圖表觀察阻力矩的轉換。</p>
+            
+            <div class="bg-white p-4 md:p-6 rounded-2xl border border-stone-200 shadow-sm">
+                <div class="chart-container">
+                    <canvas id="tnChart"></canvas>
+                </div>
+                
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                    <div class="bg-stone-50 p-4 rounded-lg border border-stone-100">
+                        <strong class="text-stone-800 block mb-1">Phase 1: 靜止啟動 (0~300 rpm)</strong>
+                        <span class="text-stone-600">作為啟動馬達，爆發 18.0 Nm 扭力強行帶動 125cc 活塞衝過壓縮上死點。</span>
+                    </div>
+                    <div class="bg-stone-50 p-4 rounded-lg border border-stone-100">
+                        <strong class="text-stone-800 block mb-1">Phase 2: 點火怠速 (300~1500 rpm)</strong>
+                        <span class="text-stone-600">引擎順利點火。控制器關閉功率元件，扭矩回到 0 Nm，轉速隨曲軸上升。</span>
+                    </div>
+                    <div class="bg-stone-50 p-4 rounded-lg border border-stone-100">
+                        <strong class="text-stone-800 block mb-1">Phase 3: 發電甜蜜點 (4000~5000 rpm)</strong>
+                        <span class="text-stone-600">電池下達充電指令。馬達施加 8.7~10.9 Nm 阻力矩，輸出 4.56 kW 電能。</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="specs">
+            <h2 class="text-2xl font-bold text-stone-800 mb-2">物理與材料規格 (CAE 定義)</h2>
+            <p class="text-sm text-stone-500 mb-6">因應密閉曲軸箱的高溫 (110°C~130°C) 與空間限制，此區塊列出嚴格的材料選型與幾何邊界。</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
+                    <div class="bg-stone-100 px-5 py-3 border-b border-stone-200">
+                        <h3 class="font-bold text-stone-800">磁路與材料</h3>
+                    </div>
+                    <div class="p-5 flex-grow space-y-4">
+                        <div>
+                            <div class="text-xs text-stone-400 uppercase tracking-wider font-semibold">定子鐵芯</div>
+                            <div class="font-medium text-stone-800">Nippon Steel 35H270</div>
+                            <div class="text-sm text-stone-600 mt-1">0.35mm 薄型矽鋼片。500Hz 下具備極低磁滯損耗，最大飽和點 Bs ≈ 1.65T。</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-stone-400 uppercase tracking-wider font-semibold">永磁鐵</div>
+                            <div class="font-medium text-stone-800">NdFeB 38EH</div>
+                            <div class="text-sm text-stone-600 mt-1">EH 級耐溫 (上限200°C)。具備 >25% 的去磁安全裕度。</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-stone-400 uppercase tracking-wider font-semibold">轉子軛/飛輪</div>
+                            <div class="font-medium text-stone-800">S45C / Sumitomo Low Carbon</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
+                    <div class="bg-stone-100 px-5 py-3 border-b border-stone-200">
+                        <h3 class="font-bold text-stone-800">幾何尺寸 (空間極度克制)</h3>
+                    </div>
+                    <div class="p-5 flex-grow">
+                        <ul class="divide-y divide-stone-100">
+                            <li class="py-2 flex justify-between">
+                                <span class="text-stone-600 text-sm">轉子外徑 (飛輪)</span>
+                                <span class="font-mono font-medium text-stone-800">135.0 mm</span>
+                            </li>
+                            <li class="py-2 flex justify-between">
+                                <span class="text-stone-600 text-sm">定子外徑</span>
+                                <span class="font-mono font-medium text-stone-800">110.0 mm</span>
+                            </li>
+                            <li class="py-2 flex justify-between">
+                                <span class="text-stone-600 text-sm">定子內徑 (軸承座)</span>
+                                <span class="font-mono font-medium text-stone-800">65.0 mm</span>
+                            </li>
+                            <li class="py-2 flex justify-between">
+                                <span class="text-stone-600 text-sm">有效疊厚</span>
+                                <span class="font-mono font-medium text-stone-800">25.0 mm</span>
+                            </li>
+                            <li class="py-2 flex justify-between">
+                                <span class="text-stone-600 text-sm">設計氣隙</span>
+                                <span class="font-mono font-medium text-stone-800">0.60 mm</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl border border-stone-200 shadow-sm overflow-hidden flex flex-col">
+                    <div class="bg-stone-100 px-5 py-3 border-b border-stone-200">
+                        <h3 class="font-bold text-stone-800">銅線繞線驗算</h3>
+                    </div>
+                    <div class="p-5 flex-grow space-y-3">
+                        <div class="bg-amber-50 px-3 py-2 rounded text-sm text-amber-800 border border-amber-100">
+                            <strong>目標：</strong> 承載 49.0 A_rms 持續相電流，克服 500Hz 趨膚效應。
+                        </div>
+                        <ul class="text-sm text-stone-600 space-y-2 mt-2">
+                            <li><strong>導線：</strong> 0.60mm 裸銅 / 0.66mm 漆膜 (Class H, 180°C)</li>
+                            <li><strong>結構：</strong> 8 股並繞, 8 匝/齒, 3 並聯支路 (3P)</li>
+                            <li><strong>槽滿率：</strong> <span class="font-bold text-stone-800">43.8%</span> (符合量產自動繞線容差)</li>
+                            <li><strong>電流密度：</strong> <span class="font-bold text-stone-800">7.22 A/mm²</span> (溫升安全區間)</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-stone-900 text-stone-400 py-8 mt-12 text-center text-sm">
+        <div class="max-w-7xl mx-auto px-4">
+            <p>Project RE-125 | 4.5kW ISG CAE Engineering Specifications</p>
+            <p class="mt-2 text-xs text-stone-500">All physics validation and data derived from core report material.</p>
+        </div>
+    </footer>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // Tab Switching Logic
+            const buttons = document.querySelectorAll('.mode-btn');
+            const contents = document.querySelectorAll('.mode-content');
+
+            buttons.forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetId = button.getAttribute('data-target');
+                    
+                    buttons.forEach(btn => btn.classList.remove('active'));
+                    contents.forEach(content => content.classList.remove('active'));
+                    
+                    button.classList.add('active');
+                    document.getElementById(targetId).classList.add('active');
+                });
+            });
+
+            // Chart.js Implementation
+            const ctx = document.getElementById('tnChart').getContext('2d');
+            
+            const tnChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    datasets: [
+                        {
+                            label: '啟動工況 (Cranking)',
+                            data: [
+                                {x: 0, y: 18},
+                                {x: 300, y: 18}
+                            ],
+                            borderColor: '#ef4444', 
+                            backgroundColor: '#ef4444',
+                            borderWidth: 4,
+                            pointRadius: 6,
+                            pointHoverRadius: 8
+                        },
+                        {
+                            label: '怠速過渡',
+                            data: [
+                                {x: 300, y: 18},
+                                {x: 301, y: 0},
+                                {x: 1500, y: 0}
+                            ],
+                            borderColor: '#a8a29e',
+                            borderDash: [5, 5],
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: false
+                        },
+                        {
+                            label: '發電工況 (Generation)',
+                            data: [
+                                {x: null, y: null}, 
+                                {x: 4000, y: -10.9},
+                                {x: 5000, y: -8.7}
+                            ],
+                            borderColor: '#10b981',
+                            backgroundColor: '#10b981',
+                            borderWidth: 4,
+                            pointRadius: 6,
+                            pointHoverRadius: 8
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index',
+                        intersect: false,
+                    },
+                    plugins: {
+                        title: {
+                            display: false
+                        },
+                        legend: {
+                            position: 'top',
+                            labels: {
+                                color: '#44403c',
+                                font: {
+                                    family: "'Segoe UI', Tahoma, Geneva, Verdana, sans-serif",
+                                    weight: 'bold'
+                                }
+                            }
+                        },
+                        tooltip: {
+                            backgroundColor: 'rgba(28, 25, 23, 0.9)',
+                            titleFont: { size: 14 },
+                            bodyFont: { size: 13 },
+                            padding: 12,
+                            callbacks: {
+                                title: function(context) {
+                                    return '轉速: ' + context[0].parsed.x + ' rpm';
+                                },
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    let val = context.parsed.y;
+                                    if (val < 0) {
+                                        label += Math.abs(val) + ' Nm (發電阻力矩)';
+                                    } else {
+                                        label += val + ' Nm (輸出扭力)';
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: {
+                                display: true,
+                                text: '引擎轉速 (rpm)',
+                                color: '#78716c',
+                                font: { weight: 'bold' }
+                            },
+                            min: 0,
+                            max: 5500,
+                            ticks: {
+                                stepSize: 1000,
+                                color: '#78716c'
+                            },
+                            grid: { color: '#f5f5f4' }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: '扭矩 (Nm)',
+                                color: '#78716c',
+                                font: { weight: 'bold' }
+                            },
+                            min: -15,
+                            max: 20,
+                            ticks: {
+                                color: '#78716c',
+                                callback: function(value) {
+                                    return value < 0 ? Math.abs(value) + ' (阻力)' : value;
+                                }
+                            },
+                            grid: {
+                                color: function(context) {
+                                    if (context.tick.value === 0) {
+                                        return '#a8a29e'; 
+                                    }
+                                    return '#f5f5f4';
+                                },
+                                lineWidth: function(context) {
+                                    if (context.tick.value === 0) {
+                                        return 2;
+                                    }
+                                    return 1;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        });
+    </script>
+</body>
+</html>
