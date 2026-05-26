@@ -1,0 +1,536 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>二輪車輛 Keyless 無鑰匙啟動系統安全重構設計指南</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; background-color: #fafaf9; color: #292524; }
+        
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 350px;
+            max-height: 400px;
+        }
+        @media (min-width: 768px) {
+            .chart-container { height: 400px; }
+        }
+
+        .tab-btn.active { border-bottom: 2px solid #059669; color: #059669; font-weight: bold; background-color: #ecfdf5; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; animation: fadeIn 0.4s ease-in-out; }
+        
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+        
+        .pulse-danger { animation: pulse-red 2s infinite; }
+        .pulse-safe { animation: pulse-green 2s infinite; }
+        @keyframes pulse-red { 0% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(225, 29, 72, 0); } 100% { box-shadow: 0 0 0 0 rgba(225, 29, 72, 0); } }
+        @keyframes pulse-green { 0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.4); } 70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); } 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); } }
+        
+        input[type=range] { -webkit-appearance: none; width: 100%; background: transparent; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 20px; width: 20px; border-radius: 50%; background: #d97706; cursor: pointer; margin-top: -8px; box-shadow: 0 1px 3px rgba(0,0,0,0.3); }
+        input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #e7e5e4; border-radius: 2px; }
+
+        .seq-arrow { width: 2px; background: #d6d3d1; position: absolute; left: 50%; transform: translateX(-50%); z-index: 0;}
+    </style>
+</head>
+<body class="antialiased selection:bg-emerald-200 selection:text-emerald-900">
+
+    <!-- Chosen Palette: Warm Neutrals (Stone) as background, Emerald for secure states, Rose for vulnerabilities, Amber for warnings/interaction. -->
+    <!-- Application Structure Plan: The SPA is structured as an interactive engineering dashboard. It flows logically from First Principles -> Architectural Evolution (Tabs comparing Static, Rolling, and Challenge-Response) -> Physical Threats (ToF Simulator) -> Final PRD Specs. This allows engineers to understand the "why" before the "how", interacting with the vulnerabilities and the mathematical solutions. -->
+    <!-- Visualization & Content Choices: 
+         Report Info: First Principles -> Goal: Inform core concepts -> Viz: Interactive HTML cards -> Interaction: Hover states -> Justification: Breaks down abstract concepts into digestible bites. NO SVG.
+         Report Info: Authentication Protocols (Static/Rolling/C-R) -> Goal: Compare architectures -> Viz: Tabbed HTML/CSS diagrams -> Interaction: Tab switching -> Justification: Allows side-by-side logical comparison of protocol evolution without overwhelming the view. NO SVG.
+         Report Info: Relay Attack & ToF -> Goal: Demonstrate physical math -> Viz: Chart.js Bar Chart & Sliders -> Interaction: Adjust distance/delay to see RTT changes -> Justification: Real-time feedback proves the efficacy of ToF. NO Mermaid.
+         Report Info: Specs -> Goal: Provide actionable requirements -> Viz: Tailwind styled Table -> Interaction: None -> Justification: Clear, tabular reference data. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+
+    <nav class="bg-stone-900 text-stone-50 sticky top-0 z-50 shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex items-center justify-between h-16">
+                <div class="flex items-center space-x-3">
+                    <span class="text-2xl">🛡️</span>
+                    <span class="font-bold text-lg tracking-wide">Keyless 防禦工程儀表板</span>
+                </div>
+                <div class="hidden md:block">
+                    <div class="ml-10 flex items-baseline space-x-4 text-sm font-medium">
+                        <a href="#principles" class="hover:text-emerald-400 transition-colors px-3 py-2">第一性原理</a>
+                        <a href="#evolution" class="hover:text-emerald-400 transition-colors px-3 py-2">通訊協議演進</a>
+                        <a href="#tof" class="hover:text-emerald-400 transition-colors px-3 py-2">中繼與ToF防禦</a>
+                        <a href="#specs" class="hover:text-emerald-400 transition-colors px-3 py-2">PRD規格</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 space-y-16">
+
+        <header class="text-center space-y-6 max-w-4xl mx-auto">
+            <div class="inline-block bg-rose-100 text-rose-800 px-4 py-1.5 rounded-full text-sm font-bold tracking-wide border border-rose-200 mb-2">
+                ⚠️ 案例鑑識：CVE-2025-70994 (Yadea EV1527 漏洞)
+            </div>
+            <h1 class="text-4xl md:text-5xl font-extrabold text-stone-800 leading-tight">二輪車輛無鑰匙啟動系統<br><span class="text-emerald-600">安全重構設計指南</span></h1>
+            <p class="text-lg text-stone-600 leading-relaxed">
+                現代 SDR（軟體定義無線電）讓傳統靜態 ID 的防禦力趨近於零。本儀表板將帶領首席工程師剖析漏洞本質，從韌體修正到導入雙向挑戰應答與 UWB ToF 測距，建構符合 GGR 級別的終極安全架構。
+            </p>
+        </header>
+
+        <section id="principles" class="scroll-mt-24">
+            <div class="mb-8 border-l-4 border-emerald-500 pl-4">
+                <h2 class="text-2xl font-bold text-stone-800">安全防禦的三道防線 (第一性原理)</h2>
+                <p class="text-stone-500 mt-1">本區塊定義了確保 Keyless 指令合法性的三大物理與密碼學基礎。任何架構設計都必須滿足這些條件才能抵禦現代駭客攻擊。</p>
+            </div>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-stone-200 hover:shadow-md transition-shadow group">
+                    <div class="text-4xl mb-4 group-hover:scale-110 transition-transform origin-left">🔐</div>
+                    <h3 class="text-xl font-bold text-stone-800 mb-2">機密性與防篡改</h3>
+                    <p class="text-stone-600 text-sm leading-relaxed">
+                        指令在空中傳輸時不能被輕易解讀，且不能被第三方偽造。<br><strong class="text-stone-800">對策：</strong>對稱加密演算法 (AES, KeeLoq) 或 HMAC 驗證。
+                    </p>
+                </div>
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-stone-200 hover:shadow-md transition-shadow group">
+                    <div class="text-4xl mb-4 group-hover:scale-110 transition-transform origin-left">⏱️</div>
+                    <h3 class="text-xl font-bold text-stone-800 mb-2">時效性 (Freshness)</h3>
+                    <p class="text-stone-600 text-sm leading-relaxed">
+                        每一個指令必須是「一次性」的。過去發送過的合法指令在未來必須失效，防止 SDR 錄音機。<br><strong class="text-stone-800">對策：</strong>滾動碼 (Rolling Counter) 或隨機數 (Nonce)。
+                    </p>
+                </div>
+                <div class="bg-white rounded-2xl p-6 shadow-sm border border-stone-200 hover:shadow-md transition-shadow group">
+                    <div class="text-4xl mb-4 group-hover:scale-110 transition-transform origin-left">📏</div>
+                    <h3 class="text-xl font-bold text-stone-800 mb-2">物理距離真實性</h3>
+                    <p class="text-stone-600 text-sm leading-relaxed">
+                        鑰匙與車輛的物理距離必須在安全範圍內 (1~1.5m)，防止訊號被惡意天線延伸放大。<br><strong class="text-stone-800">對策：</strong>UWB 飛行時間 (ToF) 或 BLE 相位量測。
+                    </p>
+                </div>
+            </div>
+        </section>
+
+        <section id="evolution" class="bg-white rounded-2xl shadow-sm border border-stone-200 overflow-hidden scroll-mt-24">
+            <div class="p-6 md:p-8 bg-stone-50 border-b border-stone-200">
+                <h2 class="text-2xl font-bold text-stone-800 mb-2">通訊協議架構演進分析</h2>
+                <p class="text-stone-600">本區塊透過互動式頁籤，比較不同世代的 Keyless 通訊協議架構。探索為何靜態碼不堪一擊，以及最終「雙向動態挑戰-應答」的運作邏輯。</p>
+            </div>
+
+            <div class="flex flex-wrap border-b border-stone-200 bg-stone-100/50">
+                <button class="tab-btn active flex-1 py-4 px-6 text-center text-sm font-medium text-stone-500 hover:text-stone-700 focus:outline-none" data-target="tab-static">
+                    ❌ 靜態碼 (EV1527)
+                </button>
+                <button class="tab-btn flex-1 py-4 px-6 text-center text-sm font-medium text-stone-500 hover:text-stone-700 focus:outline-none" data-target="tab-rolling">
+                    ⚠️ 滾動碼 (韌體緊急修正)
+                </button>
+                <button class="tab-btn flex-1 py-4 px-6 text-center text-sm font-medium text-stone-500 hover:text-stone-700 focus:outline-none" data-target="tab-challenge">
+                    ✅ 挑戰-應答 (終極架構)
+                </button>
+            </div>
+
+            <div class="p-6 md:p-8">
+                <div id="tab-static" class="tab-content active space-y-6">
+                    <div class="bg-rose-50 p-4 rounded-xl border border-rose-200 flex items-start space-x-3">
+                        <span class="text-2xl mt-1">🚨</span>
+                        <div>
+                            <h4 class="font-bold text-rose-800">CVE-2025-70994 的致命弱點</h4>
+                            <p class="text-sm text-rose-700 mt-1">使用 20-bit 固定編碼器。訊號在空中為明文，攻擊者使用幾美金的 SDR 即可進行「錄製重放 (Replay)」或直接「窮舉合成」。</p>
+                        </div>
+                    </div>
+                    <div class="flex flex-col items-center justify-center p-8 bg-stone-50 rounded-xl border border-stone-200 border-dashed">
+                        <div class="flex items-center space-x-8">
+                            <div class="text-center"><div class="text-4xl mb-2">🔑</div><span class="text-xs font-bold text-stone-500">鑰匙端</span></div>
+                            <div class="flex flex-col items-center">
+                                <div class="text-xs text-stone-500 mb-1">空中傳輸 (RF 433MHz)</div>
+                                <div class="bg-rose-100 text-rose-800 font-mono text-sm px-4 py-2 rounded-md border border-rose-300 font-bold tracking-widest">
+                                    [ID: 10110010101100101100] [CMD: 1001]
+                                </div>
+                                <div class="text-rose-500 mt-2 text-xs font-bold">↑ 每次按鍵完全相同，隨意複製 ↑</div>
+                            </div>
+                            <div class="text-center"><div class="text-4xl mb-2">🚗</div><span class="text-xs font-bold text-stone-500">車輛端</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-rolling" class="tab-content space-y-6">
+                    <div class="bg-amber-50 p-4 rounded-xl border border-amber-200 flex items-start space-x-3">
+                        <span class="text-2xl mt-1">⚠️</span>
+                        <div>
+                            <h4 class="font-bold text-amber-800">方案 A：導入微型滾動碼 (單向)</h4>
+                            <p class="text-sm text-amber-700 mt-1">透過 Payload 包含遞增 Counter 並加密，解決簡單重放攻擊。車端利用「校驗窗口 (Window Filter)」驗證。但存在 <strong>RollJam 攻擊</strong> 風險（透過干擾器阻斷並錄製未使用的代碼）。</p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
+                        <div class="space-y-3 font-mono text-sm">
+                            <div class="bg-stone-100 p-3 rounded border border-stone-300">
+                                <div class="text-xs text-stone-500 mb-1">Payload 結構</div>
+                                SN(32-bit) + Encrypted[Counter + CMD + Salt]
+                            </div>
+                            <div class="bg-emerald-50 p-3 rounded border border-emerald-200 text-emerald-800">
+                                按下第 1 次: Counter = 001, Hash = 8A3F...
+                            </div>
+                            <div class="bg-emerald-50 p-3 rounded border border-emerald-200 text-emerald-800">
+                                按下第 2 次: Counter = 002, Hash = 9B4C... (數值完全改變)
+                            </div>
+                        </div>
+                        <div class="bg-stone-800 text-stone-300 p-4 rounded-xl text-xs font-mono">
+                            <div class="text-emerald-400 mb-2">// 車端校驗邏輯 (Window Filter)</div>
+                            <div>if (rx_counter > last_counter && </div>
+                            <div>    rx_counter <= last_counter + 16) {</div>
+                            <div class="pl-4 text-emerald-300">unlock_vehicle();</div>
+                            <div class="pl-4 text-emerald-300">last_counter = rx_counter;</div>
+                            <div>} else {</div>
+                            <div class="pl-4 text-rose-400">reject(); // 防禦重放</div>
+                            <div>}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div id="tab-challenge" class="tab-content space-y-6">
+                    <div class="bg-emerald-50 p-4 rounded-xl border border-emerald-200 flex items-start space-x-3">
+                        <span class="text-2xl mt-1">✅</span>
+                        <div>
+                            <h4 class="font-bold text-emerald-800">方案 B：雙向動態挑戰-應答 (Challenge-Response)</h4>
+                            <p class="text-sm text-emerald-700 mt-1">防禦 RollJam 的終極密碼學協議。需要雙向通訊 (BLE/UWB)。空中不傳輸密鑰，只傳輸隨機數(Nonce)與雜湊值(HMAC)。保證每次通訊唯一。</p>
+                        </div>
+                    </div>
+                    
+                    <div class="relative py-8 flex flex-col space-y-8 bg-stone-50 rounded-xl border border-stone-200 px-4 md:px-12">
+                        <div class="seq-arrow top-8 bottom-8"></div>
+                        
+                        <div class="flex items-center justify-between relative z-10">
+                            <div class="w-1/3 text-right pr-6"><span class="font-bold text-stone-700">車主按下按鈕</span></div>
+                            <div class="w-8 h-8 rounded-full bg-stone-300 flex items-center justify-center font-bold text-stone-600 border-4 border-white shadow-sm">1</div>
+                            <div class="w-1/3 pl-6">
+                                <div class="bg-white p-2 rounded-lg shadow-sm border border-stone-200 text-sm text-stone-600 inline-block">請求解鎖 Request</div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between relative z-10">
+                            <div class="w-1/3 text-right pr-6">
+                                <div class="bg-emerald-100 p-2 rounded-lg border border-emerald-300 text-sm font-mono text-emerald-800 inline-block">產生 128-bit 隨機數 (R_veh)</div>
+                            </div>
+                            <div class="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center font-bold text-white border-4 border-white shadow-sm">2</div>
+                            <div class="w-1/3 pl-6"><span class="font-bold text-emerald-700">車端發送 Challenge</span></div>
+                        </div>
+
+                        <div class="flex items-center justify-between relative z-10">
+                            <div class="w-1/3 text-right pr-6"><span class="font-bold text-blue-700">鑰匙計算並回傳</span></div>
+                            <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center font-bold text-white border-4 border-white shadow-sm">3</div>
+                            <div class="w-1/3 pl-6">
+                                <div class="bg-blue-50 p-2 rounded-lg border border-blue-200 text-sm font-mono text-blue-800 inline-block text-left">
+                                    Response =<br>HMAC_SHA256(Key, R_veh)
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between relative z-10">
+                            <div class="w-1/3 text-right pr-6">
+                                <div class="bg-stone-800 p-2 rounded-lg text-sm text-emerald-400 font-mono inline-block text-left shadow-md">
+                                    比對 Response 一致<br>➜ 解鎖馬達
+                                </div>
+                            </div>
+                            <div class="w-8 h-8 rounded-full bg-stone-800 flex items-center justify-center font-bold text-white border-4 border-white shadow-sm">4</div>
+                            <div class="w-1/3 pl-6"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="tof" class="bg-stone-800 rounded-2xl shadow-xl overflow-hidden scroll-mt-24">
+            <div class="p-6 md:p-8 bg-stone-900 border-b border-stone-700">
+                <h2 class="text-2xl font-bold text-stone-50 mb-2">方案 C：終極物理防禦 - 中繼攻擊與 ToF 模擬</h2>
+                <p class="text-stone-400">即使 Challenge-Response 密碼學無懈可擊，攻擊者仍可用「中繼器」延長物理訊號欺騙車輛。本區塊透過模擬器展示 UWB 飛行時間法 (Time of Flight) 如何利用光速物理限制來粉碎中繼攻擊。</p>
+            </div>
+
+            <div class="p-6 md:p-8 text-stone-300">
+                <div class="bg-stone-950 p-4 rounded-xl border border-stone-700 font-mono text-center overflow-x-auto text-sm md:text-base mb-8 shadow-inner">
+                    <span class="text-amber-400">Distance</span> = ( <span class="text-emerald-400">t_RTT (往返時間)</span> - <span class="text-rose-400">t_fob_processing</span> ) / 2 × <span class="text-blue-400">光速(c)</span>
+                </div>
+
+                <div class="grid grid-cols-1 lg:grid-cols-12 gap-8 bg-stone-800">
+                    
+                    <div class="lg:col-span-4 space-y-8">
+                        <div class="bg-stone-700 p-5 rounded-xl border border-stone-600">
+                            <label class="block text-sm font-bold text-stone-200 mb-2">
+                                鑰匙真實物理距離：<span id="distVal" class="text-amber-400 text-lg">1.0</span> 公尺
+                            </label>
+                            <input type="range" id="realDistance" min="0.1" max="15" step="0.1" value="1.0">
+                            <p class="text-xs text-stone-400 mt-2">車主鑰匙與車輛的實際距離。</p>
+                        </div>
+    
+                        <div class="bg-stone-700 p-5 rounded-xl border border-rose-900/50 relative overflow-hidden">
+                            <div class="absolute top-0 right-0 bg-rose-600 text-white text-[10px] font-bold px-2 py-1 rounded-bl-lg">駭客外掛</div>
+                            <label class="block text-sm font-bold text-stone-200 mb-2 mt-1">
+                                中繼器硬體延遲：<span id="delayVal" class="text-rose-400 text-lg">0</span> ns
+                            </label>
+                            <input type="range" id="relayDelay" min="0" max="60" step="1" value="0">
+                            <p class="text-xs text-stone-400 mt-2">攻擊者中繼設備處理訊號增加的時間 (1ns 延遲 ≈ 0.3m 誤差)。</p>
+                        </div>
+    
+                        <div id="statusBox" class="p-4 rounded-xl text-center font-bold text-lg transition-all duration-300 shadow-md">
+                            狀態判定中...
+                        </div>
+                        
+                        <div class="bg-stone-900 p-4 rounded-xl text-stone-300 text-sm font-mono space-y-2 border border-stone-700">
+                            <div class="flex justify-between border-b border-stone-700 pb-1">
+                                <span>純物理往返(理想 RTT):</span><span id="idealRttDisplay" class="text-stone-400">--</span>
+                            </div>
+                            <div class="flex justify-between text-amber-400 font-bold mt-2">
+                                <span>車端測得總 RTT:</span><span id="totalRttDisplay">--</span>
+                            </div>
+                        </div>
+                    </div>
+    
+                    <div class="lg:col-span-8 flex flex-col justify-center bg-stone-50 rounded-xl p-4 border border-stone-200 relative">
+                        <div class="absolute top-4 left-4 text-xs font-bold text-stone-400 uppercase tracking-widest">ToF Distance Calculation</div>
+                        <div class="chart-container mt-6">
+                            <canvas id="tofChart"></canvas>
+                        </div>
+                        <p class="text-center text-xs text-stone-500 mt-4">註：系統安全距離閥值設定為 <strong class="text-stone-800">2.0 公尺</strong>。只要車端計算出的視距超過 2m，即判定為中繼攻擊或距離過遠，拒絕解鎖。</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section id="specs" class="scroll-mt-24">
+            <div class="mb-6 border-l-4 border-blue-500 pl-4">
+                <h2 class="text-2xl font-bold text-stone-800">MRD/PRD 開案建議規格</h2>
+                <p class="text-stone-500 mt-1">統整第一性原理與協議演進，以下為新一代二輪車輛 Keyless 安全控制單元的最低技術規格要求矩陣，供產品經理與研發團隊參考。</p>
+            </div>
+
+            <div class="overflow-x-auto bg-white rounded-xl shadow-sm border border-stone-200">
+                <table class="min-w-full divide-y divide-stone-200 text-sm">
+                    <thead class="bg-stone-50">
+                        <tr>
+                            <th scope="col" class="px-6 py-4 text-left font-bold text-stone-700 uppercase tracking-wider">功能模組</th>
+                            <th scope="col" class="px-6 py-4 text-left font-bold text-stone-700 uppercase tracking-wider">最低技術規格要求</th>
+                            <th scope="col" class="px-6 py-4 text-left font-bold text-stone-700 uppercase tracking-wider">防禦的攻擊類型</th>
+                            <th scope="col" class="px-6 py-4 text-left font-bold text-stone-700 uppercase tracking-wider">備註</th>
+                        </tr>
+                    </thead>
+                    <tbody class="bg-white divide-y divide-stone-200">
+                        <tr class="hover:bg-stone-50 transition-colors">
+                            <td class="px-6 py-4 whitespace-nowrap font-bold text-stone-800">射頻媒介</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-stone-600">2.4GHz BLE 5.2 / UWB (雙向)</td>
+                            <td class="px-6 py-4 text-stone-600">錄製、重放、中繼</td>
+                            <td class="px-6 py-4 text-stone-500 text-xs">剔除所有單向 315/433MHz 方案</td>
+                        </tr>
+                        <tr class="hover:bg-stone-50 transition-colors">
+                            <td class="px-6 py-4 whitespace-nowrap font-bold text-stone-800">金鑰存儲</td>
+                            <td class="px-6 py-4 whitespace-nowrap text-stone-600">車端與鑰匙配置硬體安全晶片 (SE)</td>
+                            <td class="px-6 py-4 text-stone-600">提取密鑰、克隆鑰匙</td>
+                            <td class="px-6 py-4 text-stone-500 text-xs">防止拆解晶片讀取 Flash 破解</td>
+                        </tr>
+                        <tr class="hover:bg-stone-50 transition-colors">
+                            <td class="px-6 py-4 whitespace-nowrap font-bold text-stone-800">防重放機制</td>
+                            <td class="px-6 py-4 text-stone-600">128-bit 挑戰-應答 + 時鐘同步/滾動隨機數</td>
+                            <td class="px-6 py-4 text-stone-600 font-mono text-xs bg-rose-50 text-rose-700 px-2 rounded inline-block">Replay Attack</td>
+                            <td class="px-6 py-4 text-stone-500 text-xs">確保每次通訊 Payload 唯一</td>
+                        </tr>
+                        <tr class="hover:bg-stone-50 transition-colors">
+                            <td class="px-6 py-4 whitespace-nowrap font-bold text-stone-800">抗中繼機制</td>
+                            <td class="px-6 py-4 text-stone-600">限制 RTT 延遲 < 10ms + RSSI 軌跡診斷 / ToF</td>
+                            <td class="px-6 py-4 text-stone-600 font-mono text-xs bg-rose-50 text-rose-700 px-2 rounded inline-block">Relay Attack</td>
+                            <td class="px-6 py-4 text-stone-500 text-xs">嚴格的物理距離約束</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </main>
+
+    <footer class="bg-stone-900 text-stone-400 py-8 text-center text-sm border-t border-stone-800 mt-12">
+        <p>Designed by Jarvis for Powertrain & Central Control Engineering Teams.</p>
+        <p class="mt-2 text-stone-600">Data synthesized from CVE-2025-70994 analysis and modern cryptography standards.</p>
+    </footer>
+
+    <script>
+        // --- 互動邏輯 1：頁籤切換 (通訊協議演進) ---
+        const tabBtns = document.querySelectorAll('.tab-btn');
+        const tabContents = document.querySelectorAll('.tab-content');
+
+        tabBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                tabBtns.forEach(b => b.classList.remove('active'));
+                tabContents.forEach(c => c.classList.remove('active'));
+
+                btn.classList.add('active');
+                const targetId = btn.getAttribute('data-target');
+                document.getElementById(targetId).classList.add('active');
+            });
+        });
+
+        // --- 互動邏輯 2：ToF 模擬器與 Chart.js ---
+        const SPEED_OF_LIGHT = 299792458; // m/s
+        const NS_TO_S = 1e-9;
+        const THRESHOLD_M = 2.0; 
+
+        const inputDist = document.getElementById('realDistance');
+        const inputDelay = document.getElementById('relayDelay');
+        const valDist = document.getElementById('distVal');
+        const valDelay = document.getElementById('delayVal');
+        const statusBox = document.getElementById('statusBox');
+        
+        const idealRttDisplay = document.getElementById('idealRttDisplay');
+        const totalRttDisplay = document.getElementById('totalRttDisplay');
+
+        let chartInstance = null;
+
+        function calculateToF() {
+            const realD = parseFloat(inputDist.value);
+            const relayDelayNs = parseFloat(inputDelay.value);
+            
+            // 理想狀態下的純物理往返時間 (忽略晶片處理時間，因公式中會扣除)
+            const idealRttNs = (realD * 2) / (SPEED_OF_LIGHT * NS_TO_S);
+            
+            // 駭客中繼器造成的額外延遲
+            const totalRttNs = idealRttNs + relayDelayNs;
+            
+            // 車端 MCU 根據總 RTT 計算出的「假距離」
+            const calculatedDistance = (totalRttNs * SPEED_OF_LIGHT * NS_TO_S) / 2;
+
+            return { realD, relayDelayNs, idealRttNs, totalRttNs, calculatedDistance };
+        }
+
+        function updateUI() {
+            const data = calculateToF();
+            
+            valDist.textContent = data.realD.toFixed(1);
+            valDelay.textContent = data.relayDelayNs.toFixed(0);
+            
+            idealRttDisplay.textContent = data.idealRttNs.toFixed(1) + ' ns';
+            totalRttDisplay.textContent = data.totalRttNs.toFixed(1) + ' ns';
+
+            const isSafe = data.calculatedDistance <= THRESHOLD_M;
+            
+            if (isSafe) {
+                statusBox.className = 'p-4 rounded-xl text-center font-bold text-lg transition-colors duration-300 bg-emerald-900 text-emerald-300 border border-emerald-700 pulse-safe';
+                statusBox.textContent = '✓ 距離驗證通過：允許解鎖';
+            } else {
+                statusBox.className = 'p-4 rounded-xl text-center font-bold text-lg transition-colors duration-300 bg-rose-900 text-rose-300 border border-rose-700 pulse-danger';
+                if (data.realD <= THRESHOLD_M && data.relayDelayNs > 0) {
+                    statusBox.innerHTML = '✕ 拒絕解鎖：偵測到微秒級異常延遲<br><span class="text-sm font-normal text-rose-400">已粉碎中繼攻擊</span>';
+                } else {
+                    statusBox.textContent = '✕ 拒絕解鎖：物理距離過遠 (> 2m)';
+                }
+            }
+
+            updateChart(data.calculatedDistance, data.realD);
+        }
+
+        function initChart() {
+            const ctx = document.getElementById('tofChart').getContext('2d');
+            
+            chartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['實際物理距離', '車端系統視距 (包含中繼延遲)'],
+                    datasets: [{
+                        label: '距離 (公尺)',
+                        data: [0, 0],
+                        backgroundColor: [
+                            'rgba(168, 162, 158, 0.7)', // stone-400
+                            'rgba(245, 158, 11, 0.8)'   // amber-500
+                        ],
+                        borderColor: [
+                            'rgb(120, 113, 108)',
+                            'rgb(217, 119, 6)'
+                        ],
+                        borderWidth: 2,
+                        borderRadius: 6,
+                        barPercentage: 0.6
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            backgroundColor: 'rgba(28, 25, 23, 0.9)',
+                            titleFont: { size: 14 },
+                            bodyFont: { size: 16, weight: 'bold' },
+                            padding: 12,
+                            callbacks: {
+                                label: function(context) { return context.parsed.y.toFixed(2) + ' 公尺'; }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 12, 
+                            title: { display: true, text: '距離測量 (公尺)', font: {weight: 'bold'} },
+                            grid: { color: 'rgba(0,0,0,0.05)' }
+                        },
+                        x: {
+                            grid: { display: false },
+                            ticks: { font: { weight: 'bold', size: 13 } }
+                        }
+                    },
+                    animation: { duration: 300 }
+                },
+                plugins: [{
+                    id: 'thresholdLinePlugin',
+                    beforeDraw: (chart) => {
+                        const {ctx, chartArea: {top, right, bottom, left}, scales: {y}} = chart;
+                        ctx.save();
+                        const yPos = y.getPixelForValue(THRESHOLD_M);
+                        
+                        if (yPos > top && yPos < bottom) {
+                            ctx.beginPath();
+                            ctx.setLineDash([6, 6]);
+                            ctx.moveTo(left, yPos);
+                            ctx.lineTo(right, yPos);
+                            ctx.lineWidth = 2;
+                            ctx.strokeStyle = 'rgba(225, 29, 72, 0.6)'; // rose-600
+                            ctx.stroke();
+                            ctx.restore();
+
+                            ctx.fillStyle = 'rgba(225, 29, 72, 0.9)';
+                            ctx.font = 'bold 12px sans-serif';
+                            ctx.fillText('安全距離閥值 (2.0m)', right - 120, yPos - 8);
+                        }
+                    }
+                }]
+            });
+        }
+
+        function updateChart(calcDist, realDist) {
+            if (!chartInstance) return;
+            
+            chartInstance.data.datasets[0].data[0] = realDist;
+            chartInstance.data.datasets[0].data[1] = calcDist;
+            
+            // 動態顏色變更
+            if (calcDist > THRESHOLD_M) {
+                chartInstance.data.datasets[0].backgroundColor[1] = 'rgba(225, 29, 72, 0.8)'; // rose
+                chartInstance.data.datasets[0].borderColor[1] = 'rgb(159, 18, 57)';
+            } else {
+                chartInstance.data.datasets[0].backgroundColor[1] = 'rgba(16, 185, 129, 0.8)'; // emerald
+                chartInstance.data.datasets[0].borderColor[1] = 'rgb(6, 95, 70)';
+            }
+
+            // 動態調整 Y 軸最大值保持圖表好看
+            const maxVal = Math.max(calcDist, realDist, THRESHOLD_M);
+            chartInstance.options.scales.y.max = Math.max(10, Math.ceil(maxVal) + 2);
+
+            chartInstance.update();
+        }
+
+        // 綁定事件
+        inputDist.addEventListener('input', updateUI);
+        inputDelay.addEventListener('input', updateUI);
+
+        // 初始化
+        initChart();
+        updateUI();
+    </script>
+</body>
+</html>
