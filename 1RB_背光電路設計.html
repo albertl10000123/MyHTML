@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>J.A.R.V.I.S. // Backlight Thermal & Electrical Design Sandbox</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        jarvis: {
+                            blue: '#00f0ff',
+                            darkblue: '#0b2545',
+                            glow: 'rgba(0, 240, 255, 0.15)',
+                            amber: '#ffaa00',
+                            bg: '#080f1a',
+                            panel: '#101b2b',
+                            border: '#1f3550'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Inter:wght@300;400;600;700&display=swap');
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #080f1a;
+            background-image: radial-gradient(rgba(0, 240, 255, 0.05) 1px, transparent 0);
+            background-size: 24px 24px;
+        }
+        .tech-font {
+            font-family: 'Share Tech Mono', monospace;
+        }
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #080f1a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1f3550;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #00f0ff;
+        }
+        /* 美化下標字體 */
+        sub {
+            font-size: 0.75em;
+            bottom: -0.25em;
+        }
+        sup {
+            font-size: 0.75em;
+            top: -0.4em;
+        }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen flex flex-col antialiased">
+
+    <!-- HEADER -->
+    <header class="border-b border-jarvis-border bg-jarvis-bg/90 backdrop-blur px-6 py-4 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div class="flex items-center gap-3">
+            <div class="w-3 h-3 bg-jarvis-blue rounded-full animate-ping"></div>
+            <div>
+                <h1 class="text-xl font-bold tracking-wider tech-font text-jarvis-blue">J.A.R.V.I.S. // THERMAL & ELECTRICAL SIMULATOR</h1>
+                <p class="text-xs text-slate-400">GGR-Instrument-BL-01 // Pre-Buck + CCR Matrix Backlight Engine</p>
+            </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-4 tech-font text-xs">
+            <div class="bg-jarvis-panel border border-jarvis-border px-3 py-1.5 rounded">
+                <span class="text-slate-400">TARGET:</span> <span class="text-jarvis-blue font-bold">CHIEF ENGINEER</span>
+            </div>
+            <div class="bg-jarvis-panel border border-jarvis-border px-3 py-1.5 rounded">
+                <span class="text-slate-400">MCU VCC:</span> <span class="text-emerald-400 font-bold">3.30V (Stable)</span>
+            </div>
+            <div class="bg-jarvis-panel border border-jarvis-border px-3 py-1.5 rounded">
+                <span class="text-slate-400">ACF DCDC:</span> <span class="text-emerald-400 font-bold">13.98V (Isolated)</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <main class="flex-1 grid grid-cols-1 xl:grid-cols-12 gap-6 p-6">
+        
+        <!-- LEFT: PARAMETERS & THERMAL MATH (COL 5) -->
+        <section class="xl:col-span-5 flex flex-col gap-6">
+            
+            <!-- PARAMETER CONTROLLER -->
+            <div class="bg-jarvis-panel border border-jarvis-border rounded-lg p-5 shadow-lg shadow-black/40">
+                <div class="flex justify-between items-center mb-4 border-b border-jarvis-border/60 pb-2">
+                    <h2 class="text-md font-semibold tracking-wide text-jarvis-blue flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                        熱與電學實體參數調整
+                    </h2>
+                    <button id="resetBtn" class="text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 px-2 py-1 rounded transition">重置</button>
+                </div>
+                
+                <div class="space-y-4">
+                    <!-- Ambient Temp Slider -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-amber-400 font-semibold">系統環境溫度 (Ambient Temp - T<sub>A</sub>)</span>
+                            <span class="tech-font text-amber-400 font-bold" id="val_ta">50 &deg;C</span>
+                        </div>
+                        <input type="range" id="slide_ta" min="-20" max="105" step="1" value="50" class="w-full accent-amber-500 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <!-- LED Thermal Resistance Slider -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-amber-400 font-semibold">LED 封裝至環境熱阻 (R<sub>&theta; J-A</sub>)</span>
+                            <span class="tech-font text-amber-400 font-bold" id="val_rth">180 &deg;C/W</span>
+                        </div>
+                        <input type="range" id="slide_rth" min="50" max="280" step="5" value="180" class="w-full accent-amber-500 bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        <div class="flex justify-between text-[10px] text-slate-500 mt-1">
+                            <span>金屬鋁基板 MCPCB (約 80)</span>
+                            <span>雙層 FR4 敷銅 (約 180)</span>
+                            <span>無導熱銅網 FR4 (約 250+)</span>
+                        </div>
+                    </div>
+
+                    <!-- Vin Slider -->
+                    <div>
+                        <div class="flex justify-between text-xs mb-1">
+                            <span class="text-slate-300">系統輸入電壓 (V<sub>in</sub>)</span>
+                            <span class="tech-font text-jarvis-blue" id="val_vin">13.98 V</span>
+                        </div>
+                        <input type="range" id="slide_vin" min="9" max="18" step="0.01" value="13.98" class="w-full accent-jarvis-blue bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- R_top Slider -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">Buck R<sub>top</sub></span>
+                                <span class="tech-font text-jarvis-blue" id="val_rtop">75.00 k&Omega;</span>
+                            </div>
+                            <input type="range" id="slide_rtop" min="47" max="100" step="0.5" value="75" class="w-full accent-jarvis-blue bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- R_bot Slider -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">Buck R<sub>bot</sub></span>
+                                <span class="tech-font text-jarvis-blue" id="val_rbot">10.00 k&Omega;</span>
+                            </div>
+                            <input type="range" id="slide_rbot" min="5" max="20" step="0.1" value="10" class="w-full accent-jarvis-blue bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- LED Vf Slider -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">單顆 LED V<sub>f</sub></span>
+                                <span class="tech-font text-jarvis-blue" id="val_vf">3.10 V</span>
+                            </div>
+                            <input type="range" id="slide_vf" min="2.8" max="3.4" step="0.05" value="3.1" class="w-full accent-jarvis-blue bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Parallel Count Slider -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">並聯路徑數 (P)</span>
+                                <span class="tech-font text-jarvis-blue" id="val_p_count">7 串</span>
+                            </div>
+                            <input type="range" id="slide_p_count" min="4" max="10" step="1" value="7" class="w-full accent-jarvis-blue bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        <!-- PWM Dimming Slider -->
+                        <div>
+                            <div class="flex justify-between text-xs mb-1">
+                                <span class="text-slate-300">調光頻率 (f<sub>pwm</sub>)</span>
+                                <span class="tech-font text-jarvis-blue" id="val_fpwm">20 kHz</span>
+                            </div>
+                            <input type="range" id="slide_fpwm" min="0.2" max="50" step="0.2" value="20" class="w-full accent-jarvis-blue bg-slate-800 h-1.5 rounded-lg appearance-none cursor-pointer">
+                        </div>
+
+                        <!-- Inductor Selection -->
+                        <div>
+                            <label class="block text-xs text-slate-300 mb-1">功率電感值 (L<sub>1</sub>)</label>
+                            <select id="select_ind" class="w-full bg-slate-800 border border-jarvis-border/80 text-slate-200 text-xs rounded p-1 focus:outline-none focus:border-jarvis-blue">
+                                <option value="4.7">4.7 uH (Compact)</option>
+                                <option value="10" selected>10.0 uH (Standard)</option>
+                                <option value="15">15.0 uH (Low Ripple)</option>
+                                <option value="22">22.0 uH (Overkill)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- STEP-BY-STEP CALCULATION -->
+            <div class="bg-jarvis-panel border border-jarvis-border rounded-lg p-5 flex-1 overflow-y-auto max-h-[600px] shadow-lg shadow-black/40">
+                <div class="border-b border-jarvis-border/60 pb-2 mb-4">
+                    <h2 class="text-md font-semibold tracking-wide text-jarvis-blue flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+                        第一性原理 &middot; 溫升與電學步進計算
+                    </h2>
+                </div>
+
+                <div class="space-y-4 text-xs leading-relaxed">
+                    <!-- STEP 1: V_OUT -->
+                    <div class="bg-slate-900/60 p-3 rounded border border-jarvis-border/30">
+                        <div class="flex justify-between items-center">
+                            <span class="text-jarvis-blue font-bold">Step 1: Buck 輸出電壓驗證</span>
+                            <span class="text-[10px] text-slate-500">LMR50410XQ1 FB Loop</span>
+                        </div>
+                        <div class="tech-font bg-slate-950 px-3 py-2 my-2 rounded border border-slate-800 text-emerald-400 flex flex-col gap-1 items-center">
+                            <span class="text-sm">V<sub>out</sub> = 1.0V &times; (1 + R<sub>top</sub> / R<sub>bot</sub>)</span>
+                            <span class="text-xs text-emerald-300" id="calc_step1">1.0V &times; (1 + 75k / 10k) = 8.50 V</span>
+                        </div>
+                    </div>
+
+                    <!-- STEP 2: LED JUNCTION TEMP -->
+                    <div class="bg-slate-900/60 p-3 rounded border border-amber-500/30">
+                        <div class="flex justify-between items-center">
+                            <span class="text-amber-400 font-bold">Step 2: LED 結溫第一性原理評估</span>
+                            <span class="text-[10px] text-amber-500 font-bold">JY-PT4014UW</span>
+                        </div>
+                        <div class="tech-font bg-slate-950 px-3 py-2 my-2 rounded border border-slate-800 text-amber-400 flex flex-col items-center">
+                            <span class="text-sm mb-1">&Delta;T<sub>J-A</sub> = P<sub>LED</sub> &times; R<sub>&theta; J-A</sub></span>
+                            <span class="text-sm border-b border-slate-800 pb-2 w-full text-center">T<sub>J</sub> = T<sub>A</sub> + &Delta;T<sub>J-A</sub></span>
+                            
+                            <div class="text-xs text-left w-full mt-2 space-y-1 text-slate-300">
+                                <div>&bull; P<sub>LED</sub> = <span class="text-emerald-400" id="calc_p_led">0.155 W</span></div>
+                                <div>&bull; &Delta;T<sub>J-A</sub> = <span class="text-emerald-400" id="calc_dt_led">27.9 &deg;C</span></div>
+                                <div>&bull; 最終結溫 T<sub>J</sub> = <span class="text-emerald-400 font-bold text-sm" id="calc_tj_led">77.9 &deg;C</span></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mt-1.5" id="led_thermal_status">
+                            <!-- Status dynamically injected -->
+                        </div>
+                    </div>
+
+                    <!-- NEW STEP: BUCK LOSS & THERMAL -->
+                    <div class="bg-slate-900/60 p-3 rounded border border-jarvis-blue/30 relative overflow-hidden">
+                        <div class="absolute right-0 top-0 w-1 h-full bg-jarvis-blue"></div>
+                        <div class="flex justify-between items-center">
+                            <span class="text-jarvis-blue font-bold">Step 3: Buck 系統能耗與溫升 (IC)</span>
+                            <span class="text-[10px] text-slate-500">LMR50410XQ1 Thermal</span>
+                        </div>
+                        <p class="text-slate-400 mt-1 text-[10px]">
+                            考慮內部上下橋 MOSFET 阻抗與 1MHz 切換損耗 (SOT-23-6 R<sub>&theta; J-A</sub> &approx; 175&deg;C/W)
+                        </p>
+                        <div class="tech-font bg-slate-950 px-3 py-2 my-2 rounded border border-slate-800 text-jarvis-blue flex flex-col items-center">
+                            <span class="text-xs mb-1">P<sub>loss</sub> = P<sub>cond</sub> + P<sub>sw</sub></span>
+                            <span class="text-xs border-b border-slate-800 pb-2 w-full text-center">T<sub>J(buck)</sub> = T<sub>A</sub> + P<sub>loss</sub> &times; 175&deg;C/W</span>
+                            
+                            <div class="text-xs text-left w-full mt-2 space-y-1 text-slate-300">
+                                <div>&bull; 總輸出負載 I<sub>out</sub> = <span class="text-emerald-400" id="calc_buck_iout">350 mA</span></div>
+                                <div>&bull; IC 晶片功耗 P<sub>loss</sub> = <span class="text-amber-400" id="calc_buck_p">0.075 W</span></div>
+                                <div>&bull; IC 晶片結溫 T<sub>J(buck)</sub> = <span class="text-emerald-400 font-bold text-sm" id="calc_buck_tj">63.1 &deg;C</span></div>
+                            </div>
+                        </div>
+                        <div class="flex items-center gap-2 mt-1.5" id="buck_thermal_status">
+                            <!-- Status dynamically injected -->
+                        </div>
+                    </div>
+
+                    <!-- STEP 4: CCR HEADROOM -->
+                    <div class="bg-slate-900/60 p-3 rounded border border-jarvis-border/30">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-300 font-bold">Step 4: AL5809 恆流源壓差</span>
+                            <span class="text-[10px] text-slate-500">AL5809 Headroom</span>
+                        </div>
+                        <div class="tech-font bg-slate-950 px-3 py-2 my-2 rounded border border-slate-800 text-emerald-400 flex flex-col items-center gap-1">
+                            <span class="text-sm">V<sub>ccr</sub> = V<sub>out</sub> - V<sub>string</sub> (需 &ge; 1.5V)</span>
+                            <span class="text-xs text-emerald-300" id="calc_step3_v">8.50V - 6.20V = 2.30 V</span>
+                            <span class="text-xs text-slate-300 mt-1" id="calc_step3_p">單顆功耗: 115.0 mW</span>
+                        </div>
+                    </div>
+                    
+                    <!-- STEP 5: INDUCTOR RIPPLE -->
+                    <div class="bg-slate-900/60 p-3 rounded border border-jarvis-border/30">
+                        <div class="flex justify-between items-center">
+                            <span class="text-slate-300 font-bold">Step 5: 降壓電感漣波電流</span>
+                        </div>
+                        <div class="tech-font bg-slate-950 px-3 py-1.5 my-2 rounded border border-slate-800 text-amber-400 flex flex-col items-center">
+                            <span class="text-sm font-bold text-amber-300" id="calc_step4">0.233 A</span>
+                        </div>
+                        <p class="text-[10px] text-slate-400" id="ripple_desc">
+                            <!-- Injected -->
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- RIGHT: INTERACTIVE SCHEMATIC & BOM (COL 7) -->
+        <section class="xl:col-span-7 flex flex-col gap-6">
+            
+            <!-- SCHEMATIC CANVAS BOARD -->
+            <div class="bg-jarvis-panel border border-jarvis-border rounded-lg p-5 flex flex-col shadow-lg shadow-black/40 relative">
+                <div class="flex justify-between items-center mb-2 border-b border-jarvis-border/60 pb-2">
+                    <h2 class="text-md font-semibold tracking-wide text-jarvis-blue flex items-center gap-2">
+                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"></path></svg>
+                        100% 無空飄引腳互動電路圖 (Schematic Engine)
+                    </h2>
+                    <span class="text-xs text-slate-400 tech-font">HOVER TO PROBE NODE</span>
+                </div>
+
+                <!-- LIVE METRIC TELEMETRY HUD -->
+                <div class="grid grid-cols-4 gap-2 mb-4 bg-slate-950 p-3 rounded-lg border border-jarvis-border/40 tech-font text-xs">
+                    <div class="border-r border-slate-800 pr-2">
+                        <span class="text-slate-500 block">V<sub>IN</sub> (ACF)</span>
+                        <span class="text-jarvis-blue text-sm font-bold" id="hud_vin">13.98 V</span>
+                    </div>
+                    <div class="border-r border-slate-800 px-2">
+                        <span class="text-slate-500 block">V<sub>OUT</sub> (Buck)</span>
+                        <span class="text-jarvis-blue text-sm font-bold" id="hud_vout">8.50 V</span>
+                    </div>
+                    <div class="border-r border-slate-800 px-2">
+                        <span class="text-slate-500 block">LED TEMP (T<sub>J</sub>)</span>
+                        <span class="text-amber-400 text-sm font-bold animate-pulse" id="hud_led_temp">77.90 &deg;C</span>
+                    </div>
+                    <div class="pl-2">
+                        <span class="text-slate-500 block">DIMMING STATUS</span>
+                        <span class="text-emerald-400 text-sm font-bold" id="hud_dim">ACTIVE (20kHz)</span>
+                    </div>
+                </div>
+
+                <!-- SVG SCHEMATIC -->
+                <div class="w-full bg-slate-900/40 rounded border border-jarvis-border/30 overflow-hidden relative">
+                    <svg viewBox="0 0 900 450" class="w-full h-auto" id="svg_schematic">
+                        <defs>
+                            <pattern id="grid" width="15" height="15" patternUnits="userSpaceOnUse">
+                                <path d="M 15 0 L 0 0 0 15" fill="none" stroke="#1f3550" stroke-width="0.5" opacity="0.15"/>
+                            </pattern>
+                            <marker id="arrow" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 0 L 10 5 L 0 10 z" fill="#00f0ff"/>
+                            </marker>
+                        </defs>
+                        <rect width="100%" height="100%" fill="url(#grid)" />
+
+                        <!-- SYSTEM RAIL -->
+                        <line x1="50" y1="80" x2="160" y2="80" stroke="#ffaa00" stroke-width="2" />
+                        <circle cx="50" cy="80" r="4" fill="#ffaa00" />
+                        <text x="50" y="65" fill="#ffaa00" class="tech-font text-[12px] font-bold">V_IN (13.98V)</text>
+
+                        <!-- Input Caps (C1) -->
+                        <line x1="100" y1="80" x2="100" y2="120" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="90" y1="120" x2="110" y2="120" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="90" y1="125" x2="110" y2="125" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="100" y1="125" x2="100" y2="150" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="115" y="128" fill="#475569" class="tech-font text-[10px]">C1 4.7uF</text>
+                        <line x1="90" y1="150" x2="110" y2="150" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="95" y1="154" x2="105" y2="154" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="98" y1="158" x2="102" y2="158" stroke="#00f0ff" stroke-width="1.5" />
+
+                        <!-- EN Pull-up R1 -->
+                        <line x1="140" y1="80" x2="140" y2="105" stroke="#00f0ff" stroke-width="1.5" />
+                        <path d="M 140 105 L 135 108 L 145 111 L 135 114 L 145 117 L 135 120 L 140 123" fill="none" stroke="#00f0ff" stroke-width="1.5"/>
+                        <line x1="140" y1="123" x2="140" y2="185" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="150" y="118" fill="#475569" class="tech-font text-[10px]">R1 100k</text>
+
+                        <!-- U1 Box -->
+                        <rect x="160" y="140" width="120" height="100" fill="#0b2545" stroke="#00f0ff" stroke-width="2" rx="4" class="transition-all hover:stroke-amber-400 cursor-pointer" id="node_u1" />
+                        <text x="220" y="195" fill="#00f0ff" text-anchor="middle" class="tech-font text-[12px] font-bold">LMR50410X</text>
+                        <text x="220" y="175" fill="#475569" text-anchor="middle" class="tech-font text-[9px]">U1 (SOT-23-6)</text>
+
+                        <!-- U1 Pins -->
+                        <line x1="140" y1="80" x2="160" y2="150" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="165" y="153" fill="#94a3b8" class="tech-font text-[9px]">5 VIN</text>
+                        <circle cx="160" cy="150" r="3" fill="#00f0ff" />
+                        <line x1="140" y1="185" x2="160" y2="185" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="165" y="188" fill="#94a3b8" class="tech-font text-[9px]">4 EN</text>
+                        <line x1="180" y1="240" x2="180" y2="280" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="183" y="235" fill="#94a3b8" class="tech-font text-[9px]">2 GND</text>
+                        <line x1="170" y1="280" x2="190" y2="280" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="175" y1="284" x2="185" y2="284" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="178" y1="288" x2="182" y2="288" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="280" y1="150" x2="310" y2="150" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="250" y="153" fill="#94a3b8" class="tech-font text-[9px]">1 CB</text>
+                        <line x1="310" y1="140" x2="310" y2="160" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="315" y1="140" x2="315" y2="160" stroke="#00f0ff" stroke-width="2" />
+                        <text x="302" y="130" fill="#475569" class="tech-font text-[10px]">C3 0.1uF</text>
+                        <line x1="315" y1="150" x2="330" y2="150" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="330" y1="150" x2="330" y2="215" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="280" y1="215" x2="350" y2="215" stroke="#00f0ff" stroke-width="2" id="node_sw" />
+                        <text x="250" y="218" fill="#94a3b8" class="tech-font text-[9px]">6 SW</text>
+                        <circle cx="330" cy="215" r="3" fill="#00f0ff" />
+
+                        <!-- Inductor L1 -->
+                        <path d="M 350 215 C 355 205, 362 205, 365 215 C 370 205, 377 205, 380 215 C 385 205, 392 205, 395 215 C 400 205, 407 205, 410 215" fill="none" stroke="#00f0ff" stroke-width="2.5" id="node_l1" />
+                        <text x="365" y="195" fill="#00f0ff" class="tech-font text-[11px] font-bold" id="txt_ind">L1 10.0uH</text>
+                        <line x1="410" y1="215" x2="480" y2="215" stroke="#00f0ff" stroke-width="2" />
+
+                        <!-- FB -->
+                        <line x1="280" y1="185" x2="300" y2="185" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="250" y="188" fill="#94a3b8" class="tech-font text-[9px]">3 FB</text>
+                        <line x1="300" y1="185" x2="300" y2="295" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="300" y1="295" x2="440" y2="295" stroke="#00f0ff" stroke-width="1.5" />
+
+                        <!-- Output V_out -->
+                        <circle cx="440" cy="215" r="4" fill="#00f0ff" id="node_vout" />
+                        <text x="445" y="200" fill="#00f0ff" class="tech-font text-[12px] font-bold" id="txt_vout">V_OUT (8.50V)</text>
+
+                        <!-- R_top & R_bot -->
+                        <line x1="440" y1="215" x2="440" y2="240" stroke="#00f0ff" stroke-width="1.5" />
+                        <path d="M 440 240 L 435 243 L 445 246 L 435 249 L 445 252 L 435 255 L 440 258" fill="none" stroke="#00f0ff" stroke-width="1.5"/>
+                        <text x="450" y="253" fill="#00f0ff" class="tech-font text-[10px]" id="txt_rtop">R_top 75k</text>
+                        <line x1="440" y1="258" x2="440" y2="295" stroke="#00f0ff" stroke-width="1.5" />
+                        <circle cx="440" cy="295" r="3" fill="#00f0ff" />
+                        <line x1="440" y1="295" x2="440" y2="320" stroke="#00f0ff" stroke-width="1.5" />
+                        <path d="M 440 320 L 435 323 L 445 326 L 435 329 L 445 332 L 435 335 L 440 338" fill="none" stroke="#00f0ff" stroke-width="1.5"/>
+                        <text x="450" y="333" fill="#00f0ff" class="tech-font text-[10px]" id="txt_rbot">R_bot 10k</text>
+                        <line x1="440" y1="338" x2="440" y2="365" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="430" y1="365" x2="450" y2="365" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="435" y1="369" x2="445" y2="369" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="438" y1="373" x2="442" y2="373" stroke="#00f0ff" stroke-width="1.5" />
+
+                        <!-- Filter Cap C4 -->
+                        <line x1="410" y1="215" x2="410" y2="245" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="400" y1="245" x2="420" y2="245" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="400" y1="250" x2="420" y2="250" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="410" y1="250" x2="410" y2="280" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="365" y="275" fill="#475569" class="tech-font text-[10px]">C4 22uF</text>
+                        <circle cx="410" cy="215" r="3" fill="#00f0ff" />
+                        <line x1="400" y1="280" x2="420" y2="280" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="405" y1="284" x2="415" y2="284" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="408" y1="288" x2="412" y2="288" stroke="#00f0ff" stroke-width="1.5" />
+
+                        <!-- LED & CCR -->
+                        <line x1="480" y1="215" x2="550" y2="215" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="550" y1="215" x2="550" y2="120" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="550" y1="120" x2="590" y2="120" stroke="#00f0ff" stroke-width="2" />
+
+                        <path d="M 590 110 L 590 130 L 605 120 Z" fill="none" stroke="#10b981" stroke-width="2" class="cursor-pointer" id="node_led_sym" />
+                        <line x1="605" y1="110" x2="605" y2="130" stroke="#10b981" stroke-width="2" />
+                        <line x1="595" y1="105" x2="605" y2="95" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow)" />
+                        <line x1="600" y1="105" x2="610" y2="95" stroke="#10b981" stroke-width="1.5" marker-end="url(#arrow)" />
+                        <line x1="605" y1="120" x2="630" y2="120" stroke="#10b981" stroke-width="2" />
+                        <text x="590" y="85" fill="#10b981" class="tech-font text-[10px] font-bold">LED1_A (4014)</text>
+
+                        <path d="M 630 110 L 630 130 L 645 120 Z" fill="none" stroke="#10b981" stroke-width="2" />
+                        <line x1="645" y1="110" x2="645" y2="130" stroke="#10b981" stroke-width="2" />
+                        <line x1="645" y1="120" x2="670" y2="120" stroke="#10b981" stroke-width="2" />
+                        <text x="630" y="85" fill="#10b981" class="tech-font text-[10px] font-bold">LED1_B (4014)</text>
+
+                        <rect x="670" y="100" width="50" height="40" fill="#0b2545" stroke="#10b981" stroke-width="2" rx="2" class="cursor-pointer hover:stroke-amber-400" id="node_ccr" />
+                        <text x="695" y="125" fill="#10b981" text-anchor="middle" class="tech-font text-[10px] font-bold">AL5809</text>
+                        <text x="675" y="113" fill="#94a3b8" class="tech-font text-[8px]">1 IN</text>
+                        <text x="702" y="113" fill="#94a3b8" class="tech-font text-[8px]">2 OUT</text>
+                        <line x1="720" y1="120" x2="760" y2="120" stroke="#10b981" stroke-width="2" />
+
+                        <text x="650" y="165" fill="#475569" text-anchor="middle" class="text-[9px] italic">顯示單條示意 (實體並聯配置)</text>
+
+                        <!-- MOSFET Q1 -->
+                        <line x1="760" y1="120" x2="760" y2="250" stroke="#00f0ff" stroke-width="2" />
+                        <text x="770" y="240" fill="#00f0ff" class="tech-font text-[9px]">NET_DIM_DRAIN</text>
+
+                        <line x1="760" y1="250" x2="760" y2="280" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="750" y1="280" x2="770" y2="280" stroke="#00f0ff" stroke-width="2.5" />
+                        <line x1="750" y1="280" x2="750" y2="295" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="770" y1="280" x2="770" y2="295" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="760" y1="280" x2="760" y2="295" stroke="#00f0ff" stroke-width="1.5" />
+                        <polygon points="760,290 757,282 763,282" fill="#00f0ff" />
+                        <line x1="750" y1="300" x2="770" y2="300" stroke="#00f0ff" stroke-width="2" />
+                        <line x1="740" y1="300" x2="750" y2="300" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="760" y1="295" x2="760" y2="330" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="750" y1="330" x2="770" y2="330" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="755" y1="334" x2="765" y2="334" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="758" y1="338" x2="762" y2="338" stroke="#00f0ff" stroke-width="1.5" />
+
+                        <text x="780" y="295" fill="#00f0ff" class="tech-font text-[11px] font-bold" id="node_q1">Q1 AO3400A</text>
+                        <text x="780" y="307" fill="#475569" class="tech-font text-[8px]">SOT-23 (3=D, 2=S, 1=G)</text>
+
+                        <!-- Gate Drive Network -->
+                        <line x1="600" y1="300" x2="660" y2="300" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="590" y="290" fill="#00f0ff" class="tech-font text-[10px] font-bold">PWM_MCU (3.3V)</text>
+                        <circle cx="590" cy="300" r="3.5" fill="#00f0ff" />
+
+                        <path d="M 660 300 L 663 295 L 666 305 L 669 295 L 672 305 L 675 295 L 678 300" fill="none" stroke="#00f0ff" stroke-width="1.5"/>
+                        <line x1="678" y1="300" x2="740" y2="300" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="655" y="285" fill="#475569" class="tech-font text-[9px]">R2 100R</text>
+
+                        <line x1="630" y1="300" x2="630" y2="325" stroke="#00f0ff" stroke-width="1.5" />
+                        <path d="M 630 325 L 625 328 L 635 331 L 625 334 L 635 337 L 625 340 L 630 343" fill="none" stroke="#00f0ff" stroke-width="1.5"/>
+                        <line x1="630" y1="343" x2="630" y2="365" stroke="#00f0ff" stroke-width="1.5" />
+                        <circle cx="630" cy="300" r="3" fill="#00f0ff" />
+                        <line x1="620" y1="365" x2="640" y2="365" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="625" y1="369" x2="635" y2="369" stroke="#00f0ff" stroke-width="1.5" />
+                        <line x1="628" y1="373" x2="632" y2="373" stroke="#00f0ff" stroke-width="1.5" />
+                        <text x="640" y="338" fill="#475569" class="tech-font text-[9px]">R3 10k</text>
+                    </svg>
+                </div>
+            </div>
+
+            <!-- COMPONENT SPECIFICATION GRID -->
+            <div class="bg-jarvis-panel border border-jarvis-border rounded-lg p-5 shadow-lg shadow-black/40">
+                <h3 class="text-xs font-bold tracking-wider text-jarvis-blue mb-3 border-b border-jarvis-border/60 pb-1.5 flex items-center gap-2">
+                    <span class="w-1.5 h-3 bg-jarvis-blue inline-block"></span>
+                    元件規格書對標與熱極限 (Datasheet Spec &amp; Thermal Margin)
+                </h3>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left text-[11px] text-slate-300">
+                        <thead class="bg-slate-900/80 text-jarvis-blue font-bold">
+                            <tr>
+                                <th class="p-2 border border-slate-800">元件代號</th>
+                                <th class="p-2 border border-slate-800">型號 / 封裝</th>
+                                <th class="p-2 border border-slate-800">車規標準</th>
+                                <th class="p-2 border border-slate-800">最高允許結溫 (T<sub>J</sub>)</th>
+                                <th class="p-2 border border-slate-800">當前溫度餘裕 (Margin)</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-800">
+                            <tr>
+                                <td class="p-2 border border-slate-800 font-bold text-white">U1 (Buck IC)</td>
+                                <td class="p-2 border border-slate-800">LMR50410X / SOT-23-6</td>
+                                <td class="p-2 border border-slate-800 text-emerald-400">AEC-Q100 G1</td>
+                                <td class="p-2 border border-slate-800">150&deg;C</td>
+                                <td class="p-2 border border-slate-800 font-bold text-emerald-400" id="margin_u1">&gt; 80&deg;C</td>
+                            </tr>
+                            <tr>
+                                <td class="p-2 border border-slate-800 font-bold text-white">L1 (電感)</td>
+                                <td class="p-2 border border-slate-800">XAL4020-103ME / 4x4mm</td>
+                                <td class="p-2 border border-slate-800 text-emerald-400">AEC-Q200</td>
+                                <td class="p-2 border border-slate-800">165&deg;C</td>
+                                <td class="p-2 border border-slate-800 font-bold text-emerald-400" id="margin_l1">&gt; 100&deg;C</td>
+                            </tr>
+                            <tr>
+                                <td class="p-2 border border-slate-800 font-bold text-white">U2~U8 (CCR)</td>
+                                <td class="p-2 border border-slate-800">AL5809-50 / SOD-123</td>
+                                <td class="p-2 border border-slate-800 text-emerald-400">AEC-Q100</td>
+                                <td class="p-2 border border-slate-800">150&deg;C</td>
+                                <td class="p-2 border border-slate-800 font-bold" id="margin_ccr">&gt; 70&deg;C</td>
+                            </tr>
+                            <tr class="bg-slate-900/40">
+                                <td class="p-2 border border-slate-800 font-bold text-white">LED陣列</td>
+                                <td class="p-2 border border-slate-800">JY-PT4014UW / 4014 SMD</td>
+                                <td class="p-2 border border-slate-800 text-slate-500">一般車載背光級</td>
+                                <td class="p-2 border border-slate-800 text-amber-400 font-bold">115&deg;C</td>
+                                <td class="p-2 border border-slate-800 font-bold" id="margin_led">--</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- NEW: BOM COST ANALYSIS -->
+            <div class="bg-jarvis-panel border border-jarvis-border rounded-lg p-5 shadow-lg shadow-black/40">
+                <div class="flex justify-between items-center border-b border-jarvis-border/60 pb-1.5 mb-3">
+                    <h3 class="text-xs font-bold tracking-wider text-jarvis-blue flex items-center gap-2">
+                        <span class="w-1.5 h-3 bg-jarvis-blue inline-block"></span>
+                        BOM 成本估算與量產分析 (100K EAU Volume)
+                    </h3>
+                    <span class="text-xs text-amber-400 font-bold tech-font" id="bom_total_cost">$ 0.00 USD</span>
+                </div>
+                
+                <div class="grid grid-cols-1 gap-3 text-xs" id="bom_container">
+                    <!-- BOM Items dynamically injected via JS -->
+                </div>
+                <div class="mt-4 pt-3 border-t border-slate-800 text-[10px] text-slate-400 flex justify-between">
+                    <span>* 報價基準為 2026 亞太區 Tier-1 供應鏈大宗採購預估，不含 PCB 與 SMT 打件費。</span>
+                    <span class="text-emerald-400">極具量產競爭力</span>
+                </div>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- FOOTER & PIN CHECK MATRIX -->
+    <footer class="border-t border-jarvis-border bg-jarvis-bg px-6 py-6 mt-auto">
+        <div class="max-w-7xl mx-auto flex flex-col gap-6">
+            <h3 class="text-sm font-semibold tracking-wider text-jarvis-blue flex items-center gap-2">
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path></svg>
+                車規級防空漂 / 100% 引腳無懸空驗證矩陣 (No Floating Pin Compliance Matrix)
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-xs">
+                <!-- U1 Pins -->
+                <div class="bg-jarvis-panel/60 border border-jarvis-border p-4 rounded-lg">
+                    <span class="text-emerald-400 font-bold block mb-2 tech-font">U1 (LMR50410XFDBVRQ1)</span>
+                    <ul class="space-y-1.5 text-slate-300">
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 1 (CB)</span> <span class="text-slate-400">接自舉電容 C3 (0.1uF) - 無懸空</span>
+                        </li>
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 2 (GND)</span> <span class="text-emerald-400">直接接地平原</span>
+                        </li>
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 3 (FB)</span> <span class="text-slate-400">接分壓 FB 節點 (不懸空)</span>
+                        </li>
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 4 (EN)</span> <span class="text-slate-400">R1 (100k) 偏置上拉至 VIN</span>
+                        </li>
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 5 (VIN)</span> <span class="text-slate-400">4.7uF 旁路電容極近端退耦</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span>Pin 6 (SW)</span> <span class="text-slate-400">接電感 L1 + 自舉電容 C3</span>
+                        </li>
+                    </ul>
+                </div>
+
+                <!-- AL5809 Pins -->
+                <div class="bg-jarvis-panel/60 border border-jarvis-border p-4 rounded-lg">
+                    <span class="text-emerald-400 font-bold block mb-2 tech-font">U2~U8 (AL5809-50)</span>
+                    <ul class="space-y-1.5 text-slate-300">
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 1 (IN)</span> <span class="text-slate-400">對應 LED 串最底端陰極</span>
+                        </li>
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 2 (OUT)</span> <span class="text-slate-400">整合匯至 MOSFET 漏極 (Drain)</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span>散熱座 (Pad)</span> <span class="text-emerald-400">鋪大銅箔以利散熱 (AEC-Q100)</span>
+                        </li>
+                    </ul>
+                    <div class="mt-4 text-[10px] text-slate-400">
+                        註：AL5809 為內部無基準線的浮動雙端恆流二極體結構，此接法物理上100%免去大水管並聯之 Current-Hogging 老化風險。
+                    </div>
+                </div>
+
+                <!-- Q1 Pins -->
+                <div class="bg-jarvis-panel/60 border border-jarvis-border p-4 rounded-lg font-normal">
+                    <span class="text-emerald-400 font-bold block mb-2 tech-font">Q1 (AO3400A)</span>
+                    <ul class="space-y-1.5 text-slate-300">
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 1 (Gate)</span> <span class="text-slate-400">阻抗隔離 R2 (100&Omega;) + 下拉 R3 (10k)</span>
+                        </li>
+                        <li class="flex justify-between border-b border-slate-800 pb-1">
+                            <span>Pin 2 (Source)</span> <span class="text-emerald-400">直接接 GND 地平原</span>
+                        </li>
+                        <li class="flex justify-between">
+                            <span>Pin 3 (Drain)</span> <span class="text-slate-400">接 common CCR 返地通路</span>
+                        </li>
+                    </ul>
+                    <div class="mt-3 p-2 bg-slate-900/80 border border-jarvis-border/40 rounded text-[10px] text-slate-400">
+                        <span class="text-amber-400 font-bold">防漂移保險設計:</span> R3 (10k&Omega;) 確保 MCU 開機在 IO 高阻抗（High-Z）初始化狀態時，Gate 被鎖定在地電位，絕不發生背光無預警爆閃。
+                    </div>
+                </div>
+            </div>
+
+            <!-- COPYRIGHT -->
+            <div class="flex flex-col md:flex-row justify-between items-center text-xs text-slate-500 pt-4 border-t border-slate-900 gap-2 tech-font">
+                <span>J.A.R.V.I.S. ENGINE v3.0-FULL. CONFIDENTIAL GGR RESEARCH.</span>
+                <span>DESIGNER: CHIEF ENGINEER // NTU ME ALUMNI</span>
+            </div>
+        </div>
+    </footer>
+
+    <!-- INTERACTION LOGIC (VANILLA JS) -->
+    <script>
+        // DOM Elements
+        const slideTa = document.getElementById('slide_ta');
+        const slideRth = document.getElementById('slide_rth');
+        const slideVin = document.getElementById('slide_vin');
+        const slideRtop = document.getElementById('slide_rtop');
+        const slideRbot = document.getElementById('slide_rbot');
+        const slideVf = document.getElementById('slide_vf');
+        const slidePcount = document.getElementById('slide_p_count');
+        const slideFpwm = document.getElementById('slide_fpwm');
+        const selectInd = document.getElementById('select_ind');
+        const resetBtn = document.getElementById('resetBtn');
+
+        // Output Values
+        const valTa = document.getElementById('val_ta');
+        const valRth = document.getElementById('val_rth');
+        const valVin = document.getElementById('val_vin');
+        const valRtop = document.getElementById('val_rtop');
+        const valRbot = document.getElementById('val_rbot');
+        const valVf = document.getElementById('val_vf');
+        const valPcount = document.getElementById('val_p_count');
+        const valFpwm = document.getElementById('val_fpwm');
+
+        // Calculation Outputs
+        const calcStep1 = document.getElementById('calc_step1');
+        const calcPLed = document.getElementById('calc_p_led');
+        const calcDtLed = document.getElementById('calc_dt_led');
+        const calcTjLed = document.getElementById('calc_tj_led');
+        const ledThermalStatus = document.getElementById('led_thermal_status');
+        
+        // Buck thermal outputs
+        const calcBuckIout = document.getElementById('calc_buck_iout');
+        const calcBuckP = document.getElementById('calc_buck_p');
+        const calcBuckTj = document.getElementById('calc_buck_tj');
+        const buckThermalStatus = document.getElementById('buck_thermal_status');
+
+        const calcStep3v = document.getElementById('calc_step3_v');
+        const calcStep3p = document.getElementById('calc_step3_p');
+        const calcStep4 = document.getElementById('calc_step4');
+        const rippleDesc = document.getElementById('ripple_desc');
+
+        // Margins
+        const marginU1 = document.getElementById('margin_u1');
+        const marginL1 = document.getElementById('margin_l1');
+        const marginCcr = document.getElementById('margin_ccr');
+        const marginLed = document.getElementById('margin_led');
+
+        // HUD Elements
+        const hudVin = document.getElementById('hud_vin');
+        const hudVout = document.getElementById('hud_vout');
+        const hudLedTemp = document.getElementById('hud_led_temp');
+        const hudDim = document.getElementById('hud_dim');
+
+        // Schematic Texts
+        const txtVout = document.getElementById('txt_vout');
+        const txtRtop = document.getElementById('txt_rtop');
+        const txtRbot = document.getElementById('txt_rbot');
+        const txtInd = document.getElementById('txt_ind');
+
+        // BOM Elements
+        const bomTotalCost = document.getElementById('bom_total_cost');
+        const bomContainer = document.getElementById('bom_container');
+
+        // Probe Database
+        let activeProbe = "V_OUT";
+
+        const probes = {
+            "V_OUT": {
+                name: "V_OUT (前級降壓輸出點)"
+            },
+            "SW": {
+                name: "U1 SW (開關切換結點)"
+            },
+            "CCR": {
+                name: "U2 AL5809 IN (恆流源前級)"
+            },
+            "Q1": {
+                name: "Q1 Gate (調光開關驅動極)"
+            },
+            "LED": {
+                name: "LED1_A (景研 4014 負載本體)"
+            }
+        };
+
+        // Render BOM Cost Analysis
+        function renderBOM(p_count) {
+            // High Volume (100K) Pricing estimation (USD)
+            const prices = {
+                buck: 0.25,      // LMR50410X
+                ind: 0.22,       // XAL4020
+                ccr: 0.05,       // AL5809
+                led: 0.025,      // JY-PT4014UW
+                mos: 0.03,       // AO3400A
+                passive: 0.08    // Caps + Resistors total
+            };
+
+            const qty = {
+                buck: 1,
+                ind: 1,
+                ccr: p_count,
+                led: p_count * 2, // 2S configuration
+                mos: 1,
+                passive: 1
+            };
+
+            const cost = {
+                buck: prices.buck * qty.buck,
+                ind: prices.ind * qty.ind,
+                ccr: prices.ccr * qty.ccr,
+                led: prices.led * qty.led,
+                mos: prices.mos * qty.mos,
+                passive: prices.passive * qty.passive
+            };
+
+            const total = Object.values(cost).reduce((a, b) => a + b, 0);
+            bomTotalCost.innerHTML = `$ ${total.toFixed(3)} USD`;
+
+            const items = [
+                { name: "TI LMR50410X (Buck IC)", cost: cost.buck, color: "bg-jarvis-blue" },
+                { name: "恆流源陣列 (AL5809) x" + qty.ccr, cost: cost.ccr, color: "bg-emerald-400" },
+                { name: "LED陣列 (4014) x" + qty.led, cost: cost.led, color: "bg-amber-400" },
+                { name: "Coilcraft 電感 (XAL4020)", cost: cost.ind, color: "bg-purple-400" },
+                { name: "調光 MOS (AO3400A)", cost: cost.mos, color: "bg-rose-400" },
+                { name: "周邊被動元件 (Caps, Res)", cost: cost.passive, color: "bg-slate-400" }
+            ];
+
+            // Sort by cost descending
+            items.sort((a, b) => b.cost - a.cost);
+
+            let html = "";
+            items.forEach(item => {
+                const percent = ((item.cost / total) * 100).toFixed(1);
+                html += `
+                <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-[10px] text-slate-300">
+                        <span>${item.name}</span>
+                        <span class="tech-font font-bold text-white">$ ${item.cost.toFixed(3)} (${percent}%)</span>
+                    </div>
+                    <div class="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                        <div class="${item.color} h-1.5 rounded-full" style="width: ${percent}%"></div>
+                    </div>
+                </div>`;
+            });
+            bomContainer.innerHTML = html;
+        }
+
+        // Calculation and UI Update Engine
+        function runSimulation() {
+            const t_a = parseFloat(slideTa.value);
+            const r_th = parseFloat(slideRth.value);
+            const v_in = parseFloat(slideVin.value);
+            const r_top = parseFloat(slideRtop.value);
+            const r_bot = parseFloat(slideRbot.value);
+            const v_f = parseFloat(slideVf.value);
+            const p_count = parseInt(slidePcount.value);
+            const f_pwm = parseFloat(slideFpwm.value);
+            const L = parseFloat(selectInd.value);
+
+            valTa.innerHTML = `${t_a} &deg;C`;
+            valRth.innerHTML = `${r_th} &deg;C/W`;
+            valVin.innerHTML = `${v_in.toFixed(2)} V`;
+            valRtop.innerHTML = `${r_top.toFixed(2)} k&Omega;`;
+            valRbot.innerHTML = `${r_bot.toFixed(2)} k&Omega;`;
+            valVf.innerHTML = `${v_f.toFixed(2)} V`;
+            valPcount.innerHTML = `${p_count} 串`;
+            valFpwm.innerHTML = `${f_pwm.toFixed(1)} kHz`;
+
+            // STEP 1: V_out calculation
+            const v_out = 1.0 * (1 + (r_top / r_bot));
+            calcStep1.innerHTML = `1.0V &times; (1 + ${r_top.toFixed(1)}k / ${r_bot.toFixed(1)}k) = <span class="font-bold">${v_out.toFixed(2)} V</span>`;
+
+            // STEP 2: LED Junction Temperature
+            const p_led = 0.050 * v_f; 
+            const delta_t = p_led * r_th;
+            const t_j_led = t_a + delta_t;
+
+            calcPLed.innerHTML = `${p_led.toFixed(3)} W`;
+            calcDtLed.innerHTML = `${delta_t.toFixed(1)} &deg;C`;
+            calcTjLed.innerHTML = `${t_j_led.toFixed(1)} &deg;C`;
+
+            const max_tj_led = 115.0; 
+            const margin_led_val = max_tj_led - t_j_led;
+            marginLed.innerHTML = `${margin_led_val.toFixed(1)} &deg;C`;
+
+            if (t_j_led >= max_tj_led) {
+                ledThermalStatus.innerHTML = `
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block animate-ping"></span>
+                    <span class="text-rose-500 font-bold text-[10px]">熱失控危險！已突破極限 115&deg;C！</span>
+                `;
+                marginLed.className = "p-2 border border-slate-800 font-bold text-rose-500 animate-pulse";
+            } else if (t_j_led >= 95.0) {
+                ledThermalStatus.innerHTML = `
+                    <span class="w-2.5 h-2.5 rounded-full bg-amber-400 inline-block animate-bounce"></span>
+                    <span class="text-amber-400 font-bold text-[10px]">降額警告！建議採用 MCPCB 或調降電流</span>
+                `;
+                marginLed.className = "p-2 border border-slate-800 font-bold text-amber-400";
+            } else {
+                ledThermalStatus.innerHTML = `
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 inline-block"></span>
+                    <span class="text-emerald-400 font-semibold text-[10px]">安全綠區 (Margin: ${margin_led_val.toFixed(1)}&deg;C)</span>
+                `;
+                marginLed.className = "p-2 border border-slate-800 font-bold text-emerald-400";
+            }
+
+            // STEP 3: NEW BUCK POWER LOSS & THERMAL
+            const total_I_out = p_count * 0.050; // 50mA per string
+            calcBuckIout.innerHTML = `${(total_I_out * 1000).toFixed(0)} mA`;
+
+            // Calculate Buck Loss (First Principle approximation)
+            let duty = v_out / v_in;
+            if (duty > 1) duty = 1;
+            // Typical internal FET resistance for this IC class (e.g., 0.6 Ohm High-side, 0.3 Ohm Low-side)
+            const p_cond_buck = Math.pow(total_I_out, 2) * (0.6 * duty + 0.3 * (1 - duty));
+            // Switching loss approx: 0.5 * V_in * I_out * (t_r + t_f) * f_sw
+            const p_sw_buck = 0.5 * v_in * total_I_out * 10e-9 * 1.0e6;
+            const p_buck_total = p_cond_buck + p_sw_buck;
+            calcBuckP.innerHTML = `${p_buck_total.toFixed(3)} W`;
+
+            // SOT-23-6 Rth_JA approx 175 C/W
+            const tj_buck = t_a + (p_buck_total * 175.0);
+            calcBuckTj.innerHTML = `${tj_buck.toFixed(1)} &deg;C`;
+
+            marginU1.innerHTML = `${(150.0 - tj_buck).toFixed(1)} &deg;C`;
+            
+            if (tj_buck >= 125.0) {
+                buckThermalStatus.innerHTML = `
+                    <span class="w-2.5 h-2.5 rounded-full bg-rose-500 inline-block animate-pulse"></span>
+                    <span class="text-rose-500 font-bold text-[10px]">IC 溫度過高！注意散熱鋪銅。</span>
+                `;
+                marginU1.className = "p-2 border border-slate-800 font-bold text-rose-500";
+            } else {
+                buckThermalStatus.innerHTML = `
+                    <span class="w-2.5 h-2.5 rounded-full bg-jarvis-blue inline-block"></span>
+                    <span class="text-jarvis-blue font-semibold text-[10px]">Buck 運作涼爽 (安全餘裕 ${(150 - tj_buck).toFixed(1)}&deg;C)</span>
+                `;
+                marginU1.className = "p-2 border border-slate-800 font-bold text-emerald-400";
+            }
+
+            // STEP 4: CCR HEADROOM
+            const v_string = 2 * v_f;
+            const v_ccr = v_out - v_string;
+            calcStep3v.innerHTML = `${v_out.toFixed(2)}V - (2 &times; ${v_f.toFixed(2)}V) = <span class="font-bold">${v_ccr.toFixed(2)} V</span>`;
+            
+            const p_ccr = Math.max(0, v_ccr * 0.050);
+            calcStep3p.innerHTML = `單顆 CCR 功耗: <span class="font-bold">${(p_ccr * 1000).toFixed(1)} mW</span>`;
+
+            marginL1.innerHTML = `${(165.0 - t_a).toFixed(1)} &deg;C`;
+            const tj_ccr = t_a + (p_ccr * 220); 
+            marginCcr.innerHTML = `${(150.0 - tj_ccr).toFixed(1)} &deg;C`;
+            if (150.0 - tj_ccr < 20) {
+                marginCcr.className = "p-2 border border-slate-800 font-bold text-rose-500";
+            } else {
+                marginCcr.className = "p-2 border border-slate-800 font-bold text-emerald-400";
+            }
+
+            // STEP 5: Inductor Ripple Current
+            const f_sw = 1.0; 
+            const delta_I_L = (v_out * (v_in - v_out)) / (L * f_sw * v_in);
+
+            calcStep4.innerHTML = `&Delta;I<sub>L</sub> = <span class="text-amber-300">${delta_I_L.toFixed(3)} A</span>`;
+            
+            const ripple_ratio = (delta_I_L / total_I_out) * 100;
+
+            if (ripple_ratio > 100) {
+                rippleDesc.innerHTML = `當前漣波率 <span class="text-rose-500 font-bold">${ripple_ratio.toFixed(1)}%</span>。電感進入斷續模式 (DCM)！`;
+            } else {
+                rippleDesc.innerHTML = `當前漣波率 <span class="text-emerald-400 font-bold">${ripple_ratio.toFixed(1)}%</span>。電路維持連續模式 (CCM)。`;
+            }
+
+            // Update HUD
+            hudVin.innerHTML = `${v_in.toFixed(2)} V`;
+            hudVout.innerHTML = `${v_out.toFixed(2)} V`;
+            hudLedTemp.innerHTML = `${t_j_led.toFixed(1)} &deg;C`;
+            hudDim.innerHTML = `ACTIVE (${f_pwm.toFixed(1)}kHz)`;
+
+            // Update Schematic Texts
+            txtVout.textContent = `V_OUT (${v_out.toFixed(2)}V)`;
+            txtRtop.textContent = `R_top ${r_top.toFixed(1)}k`;
+            txtRbot.textContent = `R_bot ${r_bot.toFixed(1)}k`;
+            txtInd.textContent = `L1 ${L.toFixed(1)}uH`;
+
+            // Update BOM
+            renderBOM(p_count);
+        }
+
+        [slideTa, slideRth, slideVin, slideRtop, slideRbot, slideVf, slidePcount, slideFpwm, selectInd].forEach(element => {
+            element.addEventListener('input', runSimulation);
+        });
+
+        resetBtn.addEventListener('click', () => {
+            slideTa.value = 50;
+            slideRth.value = 180;
+            slideVin.value = 13.98;
+            slideRtop.value = 75;
+            slideRbot.value = 10;
+            slideVf.value = 3.1;
+            slidePcount.value = 7;
+            slideFpwm.value = 20;
+            selectInd.value = "10";
+            runSimulation();
+        });
+
+        window.onload = function () {
+            runSimulation();
+        }
+    </script>
+</body>
+</html>
