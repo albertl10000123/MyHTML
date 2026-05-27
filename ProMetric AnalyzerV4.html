@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ProMetric Analyzer Pro | 多重 ROI 幾何分析系統</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        canvas {
+            image-rendering: pixelated; 
+        }
+        .prevent-select {
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
+        }
+        /* 工具列 Radio Button 隱藏原生樣式，改用 Tailwind 渲染 */
+        input[type="radio"]:checked + label {
+            background-color: #0891b2; /* cyan-600 */
+            color: white;
+            border-color: #06b6d4; /* cyan-500 */
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans prevent-select">
+    <div class="container mx-auto p-6 max-w-7xl">
+        
+        <!-- Header -->
+        <div class="flex justify-between items-center mb-6 border-b border-gray-700 pb-4">
+            <div>
+                <h1 class="text-3xl font-bold text-cyan-400">ProMetric Analyzer <span class="text-yellow-500 text-xl">PRO +</span></h1>
+                <p class="text-sm text-gray-400 mt-1">GGR 首席工程師專用 - AABB 優化 / 射線法多邊形 ROI 解析 / 精確參數拖曳</p>
+            </div>
+        </div>
+
+        <!-- Control Panel -->
+        <div class="bg-gray-800 rounded-xl p-6 shadow-lg mb-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <!-- File Upload -->
+            <div class="flex flex-col gap-3">
+                <label class="text-sm font-semibold text-gray-300">1. 載入 ProMetric 原始數據檔 (.txt)</label>
+                <input type="file" id="fileInput" accept=".txt" 
+                    class="block w-full text-sm text-gray-400
+                    file:mr-4 file:py-2 file:px-4
+                    file:rounded-md file:border-0
+                    file:text-sm file:font-semibold
+                    file:bg-cyan-600 file:text-white
+                    hover:file:bg-cyan-500 transition-colors cursor-pointer bg-gray-700 rounded-md">
+                <div id="loadingMsg" class="hidden text-cyan-400 text-sm animate-pulse">老賈正在解析矩陣數據，請稍候...</div>
+            </div>
+
+            <!-- Threshold Control -->
+            <div class="flex flex-col gap-3">
+                <label class="text-sm font-semibold text-gray-300">2. 設定二值化閥值 (Threshold)</label>
+                <div class="flex items-center gap-4">
+                    <input type="range" id="threshSlider" min="0" max="100" step="0.1" value="0" disabled
+                        class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer accent-cyan-500">
+                    <input type="number" id="threshInput" value="0" disabled
+                        class="w-24 bg-gray-700 text-white rounded px-2 py-1 text-center border border-gray-600 focus:outline-none focus:border-cyan-500 font-mono">
+                </div>
+                <div class="text-xs text-gray-400 flex justify-between">
+                    <span id="minValLabel">Min: --</span>
+                    <span id="maxValLabel">Max: --</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Statistics Panel -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+            <div class="bg-gray-800 p-4 rounded-xl border-l-4 border-cyan-500 relative overflow-hidden">
+                <p class="text-xs text-gray-400 mb-1">有效像素總數 <span class="roi-badge hidden text-[10px] bg-yellow-600 text-white px-1 rounded ml-1">局部 ROI</span></p>
+                <p class="text-2xl font-bold font-mono text-cyan-50" id="statCount">0</p>
+                <p class="text-xs text-gray-500 mt-1">Pixels (>= Threshold)</p>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border-l-4 border-green-500 relative overflow-hidden">
+                <p class="text-xs text-gray-400 mb-1">範圍亮度總和 <span class="roi-badge hidden text-[10px] bg-yellow-600 text-white px-1 rounded ml-1">局部 ROI</span></p>
+                <p class="text-2xl font-bold font-mono text-green-50" id="statSum">0.000</p>
+                <p class="text-xs text-gray-500 mt-1">Total Luminance</p>
+            </div>
+            <div class="bg-gray-800 p-4 rounded-xl border-l-4 border-purple-500 relative overflow-hidden">
+                <p class="text-xs text-gray-400 mb-1">範圍亮度平均 <span class="roi-badge hidden text-[10px] bg-yellow-600 text-white px-1 rounded ml-1">局部 ROI</span></p>
+                <p class="text-2xl font-bold font-mono text-purple-50" id="statAvg">0.000</p>
+                <p class="text-xs text-gray-500 mt-1">Average Luminance</p>
+            </div>
+        </div>
+
+        <!-- Telemetry & Tools Bar -->
+        <div class="flex flex-col md:flex-row justify-between items-center mb-2 bg-gray-800 px-4 py-3 rounded-lg gap-4">
+            
+            <!-- ROI 形狀選擇器 -->
+            <div class="flex items-center flex-wrap gap-2">
+                <span class="text-sm font-semibold text-gray-300 mr-1">ROI 幾何模式:</span>
+                <div class="flex bg-gray-900 rounded-md p-1 border border-gray-700">
+                    <div class="relative">
+                        <input type="radio" name="roiMode" id="modeRect" value="rect" class="peer hidden" checked>
+                        <label for="modeRect" class="cursor-pointer px-3 py-1 text-sm text-gray-400 rounded transition-colors border border-transparent">方形</label>
+                    </div>
+                    <div class="relative">
+                        <input type="radio" name="roiMode" id="modeCircle" value="circle" class="peer hidden">
+                        <label for="modeCircle" class="cursor-pointer px-3 py-1 text-sm text-gray-400 rounded transition-colors border border-transparent">自由圓</label>
+                    </div>
+                    <div class="relative">
+                        <input type="radio" name="roiMode" id="modeFixedCircle" value="fixedCircle" class="peer hidden">
+                        <label for="modeFixedCircle" class="cursor-pointer px-3 py-1 text-sm text-gray-400 rounded transition-colors border border-transparent">定圓 (直徑/拖曳)</label>
+                    </div>
+                    <div class="relative">
+                        <input type="radio" name="roiMode" id="modePolygon" value="polygon" class="peer hidden">
+                        <label for="modePolygon" class="cursor-pointer px-3 py-1 text-sm text-gray-400 rounded transition-colors border border-transparent">多邊形</label>
+                    </div>
+                </div>
+                <!-- 隱藏的直徑輸入框 (僅定圓模式顯示) -->
+                <div id="fixedCircleControls" class="hidden items-center gap-2 ml-2 pl-2 border-l border-gray-700">
+                    <label for="diameterInput" class="text-xs text-gray-400">直徑(px):</label>
+                    <input type="number" id="diameterInput" value="200" min="10" class="w-16 bg-gray-700 text-white rounded px-2 py-1 text-xs text-center border border-gray-600 focus:outline-none focus:border-cyan-500">
+                </div>
+            </div>
+
+            <div id="hoverInfo" class="text-sm font-mono text-cyan-300 tracking-wide flex-grow text-center">
+                [Telemetry 離線] 待命中...
+            </div>
+
+            <button id="btnResetRoi" class="hidden text-xs bg-gray-700 hover:bg-yellow-600 text-gray-200 hover:text-white px-4 py-2 rounded transition-all shadow border border-gray-600 font-semibold whitespace-nowrap">
+                清除 ROI (Reset)
+            </button>
+        </div>
+
+        <!-- Image Display -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            
+            <div class="bg-gray-800 rounded-xl p-4 flex flex-col relative">
+                <h3 class="text-sm font-semibold text-gray-300 mb-3 flex items-center justify-between">
+                    <span>原始熱力圖</span>
+                    <span id="polyHint" class="hidden text-xs text-yellow-400 font-normal border border-yellow-700 bg-yellow-900/30 px-2 rounded animate-pulse">點擊加點，靠近起點自動閉合</span>
+                    <span id="fixedCircleHint" class="hidden text-xs text-cyan-400 font-normal border border-cyan-700 bg-cyan-900/30 px-2 rounded animate-pulse">點擊放置定圓，按住可任意拖曳</span>
+                </h3>
+                <div class="bg-black w-full flex-grow rounded border border-gray-700 overflow-hidden relative flex items-center justify-center cursor-crosshair">
+                    <canvas id="canvasOrg" class="max-w-full max-h-[500px] object-contain"></canvas>
+                </div>
+            </div>
+
+            <div class="bg-gray-800 rounded-xl p-4 flex flex-col">
+                <h3 class="text-sm font-semibold text-gray-300 mb-3">二值化 Mask 結果</h3>
+                <div class="bg-black w-full flex-grow rounded border border-gray-700 overflow-hidden relative flex items-center justify-center" style="background-image: radial-gradient(#333 1px, transparent 1px); background-size: 20px 20px;">
+                    <canvas id="canvasMask" class="max-w-full max-h-[500px] object-contain"></canvas>
+                </div>
+            </div>
+            
+        </div>
+
+    </div>
+
+    <script>
+        // 核心狀態變數
+        let rawData = null; 
+        let imgWidth = 1528;
+        let imgHeight = 1016;
+        let globalMin = 0;
+        let globalMax = 0;
+        let maxIdx = -1; 
+
+        // ROI 狀態機變數
+        let roiMode = 'rect'; // 'rect', 'circle', 'fixedCircle', 'polygon'
+        let roiShape = null;  // 儲存完成的 ROI 資料 {type, ...}
+        
+        // 拖曳/繪製狀態
+        let isDragging = false;
+        let dragStart = null;
+        let currentMouse = null;
+        let polyPoints = []; 
+        let dragOffset = {x: 0, y: 0}; // 用於精確拖曳定圓的偏移量
+
+        // 雙緩衝畫布
+        const offscreenCanvas = document.createElement('canvas');
+        const offscreenCtx = offscreenCanvas.getContext('2d', { willReadFrequently: true });
+
+        // UI 綁定
+        const fileInput = document.getElementById('fileInput');
+        const threshSlider = document.getElementById('threshSlider');
+        const threshInput = document.getElementById('threshInput');
+        const loadingMsg = document.getElementById('loadingMsg');
+        const hoverInfo = document.getElementById('hoverInfo');
+        const btnResetRoi = document.getElementById('btnResetRoi');
+        const roiBadges = document.querySelectorAll('.roi-badge');
+        
+        const polyHint = document.getElementById('polyHint');
+        const fixedCircleHint = document.getElementById('fixedCircleHint');
+        const modeRadios = document.querySelectorAll('input[name="roiMode"]');
+        const fixedCircleControls = document.getElementById('fixedCircleControls');
+        const diameterInput = document.getElementById('diameterInput');
+        
+        const canvasOrg = document.getElementById('canvasOrg');
+        const ctxOrg = canvasOrg.getContext('2d');
+        const canvasMask = document.getElementById('canvasMask');
+        const ctxMask = canvasMask.getContext('2d', { willReadFrequently: true });
+
+        const statCount = document.getElementById('statCount');
+        const statSum = document.getElementById('statSum');
+        const statAvg = document.getElementById('statAvg');
+
+        // ROI 模式切換監聽
+        modeRadios.forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                roiMode = e.target.value;
+                roiShape = null; // 切換模式時強制清除舊 ROI
+                polyPoints = [];
+                isDragging = false;
+                
+                polyHint.classList.toggle('hidden', roiMode !== 'polygon');
+                fixedCircleHint.classList.toggle('hidden', roiMode !== 'fixedCircle');
+                fixedCircleControls.classList.toggle('hidden', roiMode !== 'fixedCircle');
+                
+                updateRoiUI();
+                drawOriginalImage();
+                processMaskAndStats();
+            });
+        });
+
+        // 監聽直徑輸入改變：若已有定圓，直接重繪與計算
+        diameterInput.addEventListener('change', (e) => {
+            let val = parseFloat(e.target.value);
+            if(isNaN(val) || val < 1) { val = 1; e.target.value = 1; }
+            if (roiShape && roiShape.type === 'circle' && roiMode === 'fixedCircle') {
+                roiShape.r = val / 2;
+                drawOriginalImage();
+                processMaskAndStats();
+            }
+        });
+
+        fileInput.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            loadingMsg.classList.remove('hidden');
+            roiShape = null;
+            polyPoints = [];
+            updateRoiUI();
+            
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                requestAnimationFrame(() => {
+                    parseProMetricFile(e.target.result);
+                    loadingMsg.classList.add('hidden');
+                });
+            };
+            reader.readAsText(file);
+        });
+
+        function parseProMetricFile(text) {
+            const lines = text.split('\n');
+            let dataStartIndex = 8; 
+            
+            for(let i = 0; i < Math.min(20, lines.length); i++) {
+                if(lines[i].includes('X 總數') || lines[i].includes('X 總數')) imgWidth = parseInt(lines[i].replace(/[^\d]/g, ''));
+                if(lines[i].includes('Y總數') || lines[i].includes('Y 總數')) imgHeight = parseInt(lines[i].replace(/[^\d]/g, ''));
+                if(lines[i].includes('終点 Y') || lines[i].includes('終點 Y')) dataStartIndex = i + 1;
+            }
+
+            rawData = new Float32Array(imgWidth * imgHeight);
+            let idx = 0;
+            globalMin = Infinity;
+            globalMax = -Infinity;
+            maxIdx = -1;
+
+            for(let i = dataStartIndex; i < lines.length; i++) {
+                if(!lines[i].trim()) continue;
+                const vals = lines[i].trim().split(/\t+/);
+                for(let j = 0; j < vals.length; j++) {
+                    const v = parseFloat(vals[j]);
+                    if(!isNaN(v) && idx < rawData.length) {
+                        rawData[idx] = v;
+                        if(v < globalMin) globalMin = v;
+                        if(v > globalMax) {
+                            globalMax = v;
+                            maxIdx = idx;
+                        }
+                        idx++;
+                    }
+                }
+            }
+
+            canvasOrg.width = imgWidth; canvasOrg.height = imgHeight;
+            canvasMask.width = imgWidth; canvasMask.height = imgHeight;
+            offscreenCanvas.width = imgWidth; offscreenCanvas.height = imgHeight;
+
+            document.getElementById('minValLabel').innerText = `Min: ${globalMin.toFixed(2)}`;
+            document.getElementById('maxValLabel').innerText = `Max: ${globalMax.toFixed(2)}`;
+            
+            threshSlider.min = globalMin;
+            threshSlider.max = globalMax;
+            const initialThresh = globalMin + ((globalMax - globalMin) * 0.5);
+            threshSlider.value = initialThresh;
+            threshInput.value = initialThresh.toFixed(3);
+            threshSlider.step = (globalMax - globalMin) / 1000;
+            threshSlider.disabled = false;
+            threshInput.disabled = false;
+
+            renderHeatmapToOffscreen();
+            drawOriginalImage();
+            processMaskAndStats();
+        }
+
+        function renderHeatmapToOffscreen() {
+            const imgData = offscreenCtx.createImageData(imgWidth, imgHeight);
+            const data = imgData.data;
+            const range = globalMax - globalMin || 1;
+
+            for(let i = 0; i < rawData.length; i++) {
+                const val = rawData[i];
+                const normalized = Math.floor(((val - globalMin) / range) * 255);
+                const pxIdx = i * 4;
+                data[pxIdx] = Math.min(255, Math.max(0, (normalized - 128) * 2));     
+                data[pxIdx+1] = Math.min(255, Math.max(0, 255 - Math.abs(normalized - 128) * 2)); 
+                data[pxIdx+2] = Math.min(255, Math.max(0, (127 - normalized) * 2));   
+                data[pxIdx+3] = 255; 
+            }
+            offscreenCtx.putImageData(imgData, 0, 0);
+        }
+
+        // 渲染底圖與幾何圖形
+        function drawOriginalImage() {
+            if(!rawData) return;
+            
+            ctxOrg.clearRect(0, 0, imgWidth, imgHeight);
+            ctxOrg.drawImage(offscreenCanvas, 0, 0); 
+
+            // 1. 最高點追蹤
+            if (maxIdx >= 0) {
+                const mx = maxIdx % imgWidth;
+                const my = Math.floor(maxIdx / imgWidth);
+                
+                ctxOrg.beginPath();
+                ctxOrg.strokeStyle = 'rgba(255, 255, 255, 0.9)';
+                ctxOrg.lineWidth = 4;
+                ctxOrg.moveTo(mx - 40, my); ctxOrg.lineTo(mx + 40, my);
+                ctxOrg.moveTo(mx, my - 40); ctxOrg.lineTo(mx, my + 40);
+                ctxOrg.stroke();
+
+                ctxOrg.beginPath();
+                ctxOrg.arc(mx, my, 20, 0, 2*Math.PI);
+                ctxOrg.strokeStyle = '#ef4444';
+                ctxOrg.lineWidth = 6;
+                ctxOrg.stroke();
+            }
+
+            // 2. 繪製進行中 (Drafting) 或 已完成 (Finalized) 的 ROI
+            ctxOrg.strokeStyle = 'rgba(234, 179, 8, 1)'; // 黃色
+            ctxOrg.fillStyle = 'rgba(234, 179, 8, 0.2)'; // 內部微亮
+            ctxOrg.lineWidth = 4;
+
+            // -- 繪製已完成的 ROI --
+            if (roiShape) {
+                ctxOrg.beginPath();
+                if (roiShape.type === 'rect') {
+                    ctxOrg.rect(roiShape.x, roiShape.y, roiShape.w, roiShape.h);
+                } else if (roiShape.type === 'circle') {
+                    ctxOrg.arc(roiShape.cx, roiShape.cy, roiShape.r, 0, 2 * Math.PI);
+                } else if (roiShape.type === 'polygon') {
+                    ctxOrg.moveTo(roiShape.points[0].x, roiShape.points[0].y);
+                    for(let i=1; i<roiShape.points.length; i++) {
+                        ctxOrg.lineTo(roiShape.points[i].x, roiShape.points[i].y);
+                    }
+                    ctxOrg.closePath();
+                }
+                ctxOrg.stroke();
+                ctxOrg.fill();
+            } 
+            // -- 繪製拖曳/點擊中的 ROI (預覽) --
+            else {
+                ctxOrg.setLineDash([10, 10]); // 虛線表示未完成
+                if (roiMode === 'fixedCircle' && currentMouse && !isDragging) {
+                    // 定圓模式：跟隨游標的預覽 Ghost Circle
+                    let val = parseFloat(diameterInput.value);
+                    if(isNaN(val)) val = 10;
+                    const r = val / 2;
+                    ctxOrg.beginPath();
+                    ctxOrg.arc(currentMouse.x, currentMouse.y, r, 0, 2 * Math.PI);
+                    ctxOrg.stroke();
+                } else if (roiMode === 'rect' && isDragging && dragStart && currentMouse) {
+                    ctxOrg.strokeRect(
+                        Math.min(dragStart.x, currentMouse.x), Math.min(dragStart.y, currentMouse.y),
+                        Math.abs(currentMouse.x - dragStart.x), Math.abs(currentMouse.y - dragStart.y)
+                    );
+                } else if (roiMode === 'circle' && isDragging && dragStart && currentMouse) {
+                    const r = Math.hypot(currentMouse.x - dragStart.x, currentMouse.y - dragStart.y);
+                    ctxOrg.beginPath();
+                    ctxOrg.arc(dragStart.x, dragStart.y, r, 0, 2 * Math.PI);
+                    ctxOrg.stroke();
+                    
+                    // 畫出半徑輔助線
+                    ctxOrg.beginPath();
+                    ctxOrg.moveTo(dragStart.x, dragStart.y);
+                    ctxOrg.lineTo(currentMouse.x, currentMouse.y);
+                    ctxOrg.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+                    ctxOrg.stroke();
+                } else if (roiMode === 'polygon' && polyPoints.length > 0) {
+                    ctxOrg.beginPath();
+                    ctxOrg.moveTo(polyPoints[0].x, polyPoints[0].y);
+                    for(let i=1; i<polyPoints.length; i++) {
+                        ctxOrg.lineTo(polyPoints[i].x, polyPoints[i].y);
+                    }
+                    // 連接到目前滑鼠位置
+                    if (currentMouse) {
+                        ctxOrg.lineTo(currentMouse.x, currentMouse.y);
+                    }
+                    ctxOrg.stroke();
+                    
+                    // 畫出起始點吸附圈
+                    if (polyPoints.length > 2) {
+                        ctxOrg.setLineDash([]);
+                        ctxOrg.beginPath();
+                        ctxOrg.arc(polyPoints[0].x, polyPoints[0].y, 15, 0, 2*Math.PI);
+                        ctxOrg.strokeStyle = 'rgba(239, 68, 68, 0.8)';
+                        ctxOrg.stroke();
+                    }
+                }
+                ctxOrg.setLineDash([]); // 恢復實線
+            }
+        }
+
+        function isPointInPolygon(point, vs) {
+            let x = point.x, y = point.y;
+            let isInside = false;
+            for (let i = 0, j = vs.length - 1; i < vs.length; j = i++) {
+                let xi = vs[i].x, yi = vs[i].y;
+                let xj = vs[j].x, yj = vs[j].y;
+                let intersect = ((yi > y) != (yj > y)) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi);
+                if (intersect) isInside = !isInside;
+            }
+            return isInside;
+        }
+
+        function processMaskAndStats() {
+            if(!rawData) return;
+            
+            const threshold = parseFloat(threshSlider.value);
+            const imgData = ctxMask.createImageData(imgWidth, imgHeight);
+            const data = imgData.data;
+            
+            let count = 0, sum = 0;
+
+            let startX = 0, endX = imgWidth, startY = 0, endY = imgHeight;
+            if (roiShape) {
+                if (roiShape.type === 'rect') {
+                    startX = roiShape.x; endX = roiShape.x + roiShape.w;
+                    startY = roiShape.y; endY = roiShape.y + roiShape.h;
+                } else if (roiShape.type === 'circle') {
+                    startX = roiShape.cx - roiShape.r; endX = roiShape.cx + roiShape.r;
+                    startY = roiShape.cy - roiShape.r; endY = roiShape.cy + roiShape.r;
+                } else if (roiShape.type === 'polygon') {
+                    startX = Math.min(...roiShape.points.map(p => p.x));
+                    endX = Math.max(...roiShape.points.map(p => p.x));
+                    startY = Math.min(...roiShape.points.map(p => p.y));
+                    endY = Math.max(...roiShape.points.map(p => p.y));
+                }
+                startX = Math.max(0, Math.floor(startX)); endX = Math.min(imgWidth, Math.ceil(endX));
+                startY = Math.max(0, Math.floor(startY)); endY = Math.min(imgHeight, Math.ceil(endY));
+            }
+
+            for(let y = 0; y < imgHeight; y++) {
+                for(let x = 0; x < imgWidth; x++) {
+                    const idx = y * imgWidth + x;
+                    const val = rawData[idx];
+                    const pxIdx = idx * 4;
+
+                    let inROI = true;
+                    if (roiShape) {
+                        if (x < startX || x > endX || y < startY || y > endY) {
+                            inROI = false;
+                        } else {
+                            if (roiShape.type === 'circle') {
+                                inROI = (x - roiShape.cx)**2 + (y - roiShape.cy)**2 <= roiShape.r**2;
+                            } else if (roiShape.type === 'polygon') {
+                                inROI = isPointInPolygon({x, y}, roiShape.points);
+                            }
+                        }
+                    }
+
+                    if(inROI && val >= threshold) {
+                        data[pxIdx] = 6;       
+                        data[pxIdx+1] = 182;   
+                        data[pxIdx+2] = 212;   
+                        data[pxIdx+3] = 255;   
+                        count++;
+                        sum += val;
+                    } else {
+                        data[pxIdx] = 0;
+                        data[pxIdx+1] = 0;
+                        data[pxIdx+2] = 0;
+                        data[pxIdx+3] = roiShape ? 230 : 200; 
+                    }
+                }
+            }
+
+            ctxMask.putImageData(imgData, 0, 0);
+
+            const avg = count > 0 ? (sum / count) : 0;
+            statCount.innerText = count.toLocaleString();
+            statSum.innerText = sum.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            statAvg.innerText = avg.toLocaleString(undefined, {minimumFractionDigits: 4, maximumFractionDigits: 4});
+        }
+
+        function getMousePos(canvas, evt) {
+            const rect = canvas.getBoundingClientRect();
+            const scale = Math.min(rect.width / imgWidth, rect.height / imgHeight);
+            const renderedWidth = imgWidth * scale;
+            const renderedHeight = imgHeight * scale;
+            const offsetX = (rect.width - renderedWidth) / 2;
+            const offsetY = (rect.height - renderedHeight) / 2;
+
+            const x = Math.floor((evt.clientX - rect.left - offsetX) / scale);
+            const y = Math.floor((evt.clientY - rect.top - offsetY) / scale);
+            return { x, y };
+        }
+
+        // ----- 滑鼠事件綁定 -----
+
+        canvasOrg.addEventListener('mousedown', (e) => {
+            if(!rawData) return;
+            const pos = getMousePos(canvasOrg, e);
+            if(pos.x < 0 || pos.y < 0 || pos.x >= imgWidth || pos.y >= imgHeight) return;
+
+            // 定圓模式的特殊邏輯：可重新拖動已有的圓，或點擊空白處移過去
+            if (roiMode === 'fixedCircle') {
+                if (roiShape && roiShape.type === 'circle') {
+                    const dist = Math.hypot(pos.x - roiShape.cx, pos.y - roiShape.cy);
+                    if (dist <= roiShape.r) {
+                        // 點擊在現有圓內 -> 進入拖曳模式
+                        isDragging = true;
+                        dragOffset.x = roiShape.cx - pos.x;
+                        dragOffset.y = roiShape.cy - pos.y;
+                    } else {
+                        // 點擊在現有圓外 -> 瞬間將圓移動到新位置
+                        roiShape.cx = pos.x;
+                        roiShape.cy = pos.y;
+                        processMaskAndStats();
+                    }
+                } else {
+                    // 尚未有圖形 -> 根據輸入直徑生成定圓
+                    let val = parseFloat(diameterInput.value);
+                    if(isNaN(val)) val = 10;
+                    roiShape = { type: 'circle', cx: pos.x, cy: pos.y, r: val / 2 };
+                    updateRoiUI();
+                    processMaskAndStats();
+                }
+                drawOriginalImage();
+                return;
+            }
+            
+            if(roiShape) return; // 其他模式，若已有圖形則鎖定，除非點擊 Reset
+            
+            if (roiMode === 'rect' || roiMode === 'circle') {
+                isDragging = true;
+                dragStart = pos;
+                currentMouse = pos;
+            } 
+            else if (roiMode === 'polygon') {
+                if (polyPoints.length === 0) {
+                    polyPoints.push(pos);
+                } else {
+                    const distToStart = Math.hypot(pos.x - polyPoints[0].x, pos.y - polyPoints[0].y);
+                    if (polyPoints.length >= 3 && distToStart < 20) { 
+                        roiShape = { type: 'polygon', points: [...polyPoints] };
+                        polyPoints = []; 
+                        updateRoiUI();
+                        processMaskAndStats();
+                    } else {
+                        polyPoints.push(pos);
+                    }
+                }
+            }
+            drawOriginalImage();
+        });
+
+        canvasOrg.addEventListener('mousemove', (e) => {
+            if(!rawData) return;
+            const pos = getMousePos(canvasOrg, e);
+            
+            // Telemetry
+            if(pos.x >= 0 && pos.x < imgWidth && pos.y >= 0 && pos.y < imgHeight) {
+                const val = rawData[pos.y * imgWidth + pos.x];
+                const isMax = (val === globalMax);
+                hoverInfo.innerHTML = `[X: ${pos.x}, Y: ${pos.y}] | 亮度: <span class="${isMax ? 'text-red-500 font-bold' : 'text-white font-bold'}">${val.toFixed(4)}</span> ${isMax ? ' (PEAK)' : ''}`;
+            } else {
+                hoverInfo.innerText = '[Telemetry] 待命中...';
+            }
+
+            currentMouse = {
+                x: Math.max(0, Math.min(imgWidth - 1, pos.x)),
+                y: Math.max(0, Math.min(imgHeight - 1, pos.y))
+            };
+
+            // 游標與狀態更新
+            if (roiMode === 'fixedCircle') {
+                if (roiShape) {
+                    const dist = Math.hypot(pos.x - roiShape.cx, pos.y - roiShape.cy);
+                    canvasOrg.style.cursor = dist <= roiShape.r ? (isDragging ? 'grabbing' : 'grab') : 'crosshair';
+                    
+                    if (isDragging) {
+                        roiShape.cx = currentMouse.x + dragOffset.x;
+                        roiShape.cy = currentMouse.y + dragOffset.y;
+                        processMaskAndStats(); // 拖曳時即時更新統計 (Real-time Sweeping)
+                    }
+                } else {
+                    canvasOrg.style.cursor = 'crosshair';
+                }
+                drawOriginalImage(); // 為了持續重繪 Ghost Circle 或移動中的圓
+                return;
+            } else {
+                canvasOrg.style.cursor = 'crosshair';
+            }
+
+            if (isDragging || polyPoints.length > 0) {
+                drawOriginalImage(); 
+            }
+        });
+
+        canvasOrg.addEventListener('mouseup', (e) => {
+            if (roiMode === 'fixedCircle') {
+                isDragging = false;
+                return;
+            }
+
+            if(!isDragging) return;
+            isDragging = false;
+            
+            if (roiMode === 'rect') {
+                if (Math.abs(currentMouse.x - dragStart.x) > 5 && Math.abs(currentMouse.y - dragStart.y) > 5) {
+                    roiShape = {
+                        type: 'rect',
+                        x: Math.min(dragStart.x, currentMouse.x),
+                        y: Math.min(dragStart.y, currentMouse.y),
+                        w: Math.abs(currentMouse.x - dragStart.x),
+                        h: Math.abs(currentMouse.y - dragStart.y)
+                    };
+                }
+            } else if (roiMode === 'circle') {
+                const r = Math.hypot(currentMouse.x - dragStart.x, currentMouse.y - dragStart.y);
+                if (r > 5) {
+                    roiShape = {
+                        type: 'circle',
+                        cx: dragStart.x,
+                        cy: dragStart.y,
+                        r: r
+                    };
+                }
+            }
+
+            if (roiShape) {
+                updateRoiUI();
+                processMaskAndStats();
+            }
+            drawOriginalImage();
+        });
+
+        canvasOrg.addEventListener('dblclick', (e) => {
+            if (roiMode === 'polygon' && polyPoints.length >= 3) {
+                roiShape = { type: 'polygon', points: [...polyPoints] };
+                polyPoints = [];
+                updateRoiUI();
+                processMaskAndStats();
+                drawOriginalImage();
+            }
+        });
+
+        btnResetRoi.addEventListener('click', () => {
+            roiShape = null;
+            polyPoints = [];
+            isDragging = false;
+            updateRoiUI();
+            drawOriginalImage();
+            processMaskAndStats();
+        });
+
+        function updateRoiUI() {
+            if (roiShape || polyPoints.length > 0) {
+                btnResetRoi.classList.remove('hidden');
+                if(roiShape) roiBadges.forEach(b => b.classList.remove('hidden'));
+            } else {
+                btnResetRoi.classList.add('hidden');
+                roiBadges.forEach(b => b.classList.add('hidden'));
+            }
+        }
+
+        threshSlider.addEventListener('input', function() {
+            threshInput.value = parseFloat(this.value).toFixed(3);
+            processMaskAndStats();
+        });
+
+        threshInput.addEventListener('change', function() {
+            let val = parseFloat(this.value);
+            if(val < globalMin) val = globalMin;
+            if(val > globalMax) val = globalMax;
+            this.value = val.toFixed(3);
+            threshSlider.value = val;
+            processMaskAndStats();
+        });
+
+    </script>
+</body>
+</html>
