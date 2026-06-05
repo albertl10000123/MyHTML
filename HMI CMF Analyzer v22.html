@@ -807,7 +807,12 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a'); 
             a.href = url; 
-            a.download = `HMI_Matrix_${Date.now()}.csv`; 
+            
+            // 修正：動態套用窗格輸入值至檔名，並過濾作業系統非法字元
+            const safeProjectName = projectLink.trim().replace(/[\\/:*?"<>|]/g, '_');
+            const namePrefix = safeProjectName ? `${safeProjectName}_` : 'Matrix_';
+            a.download = `HMI_${namePrefix}${Date.now()}.csv`; 
+            
             a.click();
             URL.revokeObjectURL(url);
 
