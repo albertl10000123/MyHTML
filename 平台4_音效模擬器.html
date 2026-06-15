@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>車輛音效頻率模擬器 (Vehicle Sound Sim - AI Agent)</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1, h2 { font-weight: 300; color: #fff; margin-top: 0;}
+        .container {
+            width: 90%;
+            max-width: 800px;
+            background-color: #1e1e1e;
+            padding: 25px;
+            border-radius: 12px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+            margin-bottom: 20px;
+            border: 1px solid #333;
+        }
+        
+        /* 針對 AI 區塊的特殊樣式 */
+        .ai-container {
+            border-top: 3px solid #ab47bc;
+            background: linear-gradient(180deg, #2a1b2e 0%, #1e1e1e 100%);
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        label { font-size: 14px; color: #aaa; }
+        
+        select, input[type="text"], input[type="password"] {
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #444;
+            background: #2c2c2c;
+            color: white;
+            flex: 1;
+            min-width: 200px;
+            transition: border-color 0.2s;
+        }
+        
+        select:focus, input:focus, textarea:focus {
+            outline: none;
+            border-color: #ab47bc;
+        }
+
+        textarea {
+            width: 100%;
+            height: 100px;
+            background-color: #252525;
+            color: #00ffcc;
+            border: 1px solid #444;
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            border-radius: 5px;
+            resize: vertical;
+            box-sizing: border-box;
+            margin-bottom: 10px;
+        }
+        
+        .ai-prompt {
+            color: #fff;
+            background-color: #1a1a2e;
+            border-color: #3b3b6b;
+            height: 60px;
+        }
+
+        /* 按鈕樣式 */
+        .btn-group { display: flex; gap: 10px; flex-wrap: wrap; }
+        
+        button {
+            padding: 10px 18px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+        button:hover { filter: brightness(1.1); transform: translateY(-1px); }
+        button:active { transform: scale(0.98); }
+        button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+        .btn-ai { background-color: #ab47bc; color: #fff; }
+        .btn-action { background-color: #333; color: #fff; border: 1px solid #555; }
+        .btn-action-save { background-color: #ff9800; color: #000; }
+        .btn-play { background-color: #00e676; color: #000; }
+        .btn-stop { background-color: #ff1744; color: #fff; }
+        
+        .btn-preset { background-color: #2979ff; color: white; text-align: left; position: relative; overflow: hidden;}
+        .btn-preset.custom-preset { background-color: #ff9800; color: black; } /* 自訂音效顏色區別 */
+        .btn-preset span { font-size: 12px; display: block; opacity: 0.7; font-weight: normal; }
+        .btn-preset.playing { background-color: #00e676; color: black; border-left: 5px solid white; }
+
+        /* 儲存區塊分隔線 */
+        .save-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 1px dashed #444;
+        }
+
+        /* 狀態與網格 */
+        .status-bar {
+            margin-top: 10px;
+            font-size: 14px;
+            color: #888;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .status-error { color: #ff5252; }
+        .status-success { color: #00e676; }
+        .status-ai { color: #ab47bc; }
+
+        .library-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        /* 載入動畫 */
+        .spinner {
+            display: none;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: #fff;
+            animation: spin 1s ease-in-out infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .is-loading .spinner { display: inline-block; }
+        
+    </style>
+</head>
+<body>
+
+    <!-- 1. AI 智能生成區塊 -->
+    <div class="container ai-container">
+        <h2>🤖 Agent 音效生成器 (AI Generator)</h2>
+        
+        <div class="input-group">
+            <input type="password" id="apiKey" placeholder="輸入 Google Gemini API Key" autocomplete="off">
+            <button class="btn-action" id="btnDetectModels" onclick="detectModels()">
+                <div class="spinner" id="modelSpinner"></div>
+                載入模型
+            </button>
+        </div>
+
+        <div class="input-group">
+            <select id="modelSelect">
+                <option value="">請先輸入 API Key 並載入模型...</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <textarea id="aiPrompt" class="ai-prompt" placeholder="描述你想要的音效，例如：「電動車啟動時的高科技漸強音效」、「清脆的雙聲解鎖聲」或「Gogoro 打方向燈的聲音」"></textarea>
+        </div>
+        
+        <div class="btn-group">
+            <button class="btn-ai" id="btnGenerate" onclick="generateSound()">
+                <div class="spinner" id="genSpinner"></div>
+                ✨ 生成音效數據 (10ms 陣列)
+            </button>
+        </div>
+        <div id="aiStatus" class="status-bar">等待指令...</div>
+    </div>
+
+    <!-- 2. 手動輸入/微調與儲存區塊 -->
+    <div class="container">
+        <h2>🎛️ Raw Data 微調與儲存 (Data Sandbox)</h2>
+        <p style="color:#888; font-size: 13px; margin-top:0;">將 Agent 生成的數據在此進行比對、修改，滿意後可打包成自訂音效。</p>
+        
+        <div class="input-group">
+            <label>發聲元件波形：</label>
+            <select id="waveType" style="flex: 0 1 auto; min-width: 150px;">
+                <option value="square">Square (方波 - 蜂鳴器感)</option>
+                <option value="sawtooth">Sawtooth (鋸齒波)</option>
+                <option value="sine">Sine (正弦波)</option>
+                <option value="triangle">Triangle (三角波)</option>
+            </select>
+        </div>
+        
+        <textarea id="manualInput" placeholder="在此輸入或貼上頻率數列，例如: 2500, 2500, 0, 2500... (支援 C 語言陣列格式貼上)"></textarea>
+        
+        <div class="btn-group">
+            <button class="btn-play" onclick="playManual()">▶ 播放測試當前數列</button>
+            <button class="btn-stop" onclick="stopAudio()">⏹ 停止</button>
+        </div>
+        
+        <!-- 新增至音效庫功能 -->
+        <div class="save-section">
+            <div class="input-group" style="margin-bottom: 0;">
+                <input type="text" id="newSoundName" placeholder="音效名稱 (例: 測試漸強音)" style="flex: 2;">
+                <input type="text" id="newSoundId" placeholder="代號 (例: CUSTOM_01)" style="flex: 1;">
+                <button class="btn-action-save" onclick="saveToLibrary()">➕ 儲存至音效庫</button>
+            </div>
+        </div>
+        
+        <div id="status" class="status-bar">就緒</div>
+    </div>
+
+    <!-- 3. 內建與自訂音效庫 -->
+    <div class="container">
+        <h2>📂 音效庫 (Sound Library)</h2>
+        <p style="color:#666; font-size: 13px; margin-top:0;">點擊下方按鈕直接播放 (解析度: 10ms/step)。點擊時會自動將陣列帶入上方沙盒。</p>
+        <div class="library-grid" id="libraryContainer"></div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. Audio Engine Setup (Edge Audio Driver)
+        // ==========================================
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        let ctx = null; 
+        let currentOsc = null;
+        let currentGain = null;
+        let timeouts = [];
+
+        function initAudioContext() {
+            if (!ctx) ctx = new AudioContext();
+            if (ctx.state === 'suspended') ctx.resume();
+        }
+
+        // ==========================================
+        // 2. AI Agent Core (Cloud API Bridge)
+        // ==========================================
+        const API_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models";
+
+        function updateUIStatus(elementId, message, type = 'normal') {
+            const el = document.getElementById(elementId);
+            el.innerText = message;
+            el.className = 'status-bar';
+            if (type === 'error') el.classList.add('status-error');
+            if (type === 'success') el.classList.add('status-success');
+            if (type === 'ai') el.classList.add('status-ai');
+        }
+
+        async function fetchWithRetry(url, options, maxRetries = 5) {
+            let delay = 1000;
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (!response.ok) {
+                        const errorData = await response.json().catch(() => ({}));
+                        throw new Error(`HTTP error! status: ${response.status}, message: ${errorData.error?.message || 'Unknown'}`);
+                    }
+                    return await response.json();
+                } catch (error) {
+                    if (i === maxRetries - 1) throw error;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    delay *= 2; 
+                }
+            }
+        }
+
+        async function detectModels() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            if (!apiKey) {
+                updateUIStatus('aiStatus', '錯誤：請先輸入 API Key', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btnDetectModels');
+            const select = document.getElementById('modelSelect');
+            btn.classList.add('is-loading');
+            btn.disabled = true;
+            updateUIStatus('aiStatus', '正在連線獲取模型列表...');
+
+            try {
+                const url = `${API_BASE_URL}?key=${apiKey}`;
+                const data = await fetchWithRetry(url, { method: 'GET' });
+                
+                select.innerHTML = '';
+                let hasGemini = false;
+                
+                data.models.forEach(model => {
+                    if (model.name.includes('gemini') && model.supportedGenerationMethods.includes('generateContent')) {
+                        const option = document.createElement('option');
+                        option.value = model.name;
+                        option.textContent = model.displayName || model.name;
+                        if (model.name.includes('flash') && !hasGemini) {
+                            option.selected = true;
+                        }
+                        select.appendChild(option);
+                        hasGemini = true;
+                    }
+                });
+
+                if (!hasGemini) {
+                    select.innerHTML = '<option value="">找不到支援的模型</option>';
+                    updateUIStatus('aiStatus', '警告：你的 API Key 沒有可用的文字生成模型權限', 'error');
+                } else {
+                    updateUIStatus('aiStatus', '✅ 模型載入成功', 'success');
+                }
+            } catch (error) {
+                updateUIStatus('aiStatus', `連線失敗: ${error.message}`, 'error');
+            } finally {
+                btn.classList.remove('is-loading');
+                btn.disabled = false;
+            }
+        }
+
+        async function generateSound() {
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const modelName = document.getElementById('modelSelect').value;
+            const prompt = document.getElementById('aiPrompt').value.trim();
+            const manualInput = document.getElementById('manualInput');
+
+            if (!apiKey || !modelName) {
+                updateUIStatus('aiStatus', '錯誤：請確保 API Key 已輸入且已載入模型', 'error');
+                return;
+            }
+            if (!prompt) {
+                updateUIStatus('aiStatus', '錯誤：請輸入音效描述 (Prompt)', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('btnGenerate');
+            btn.classList.add('is-loading');
+            btn.disabled = true;
+            updateUIStatus('aiStatus', '🧠 Agent 正在進行物理聲學運算與頻率編排...', 'ai');
+
+            const systemInstruction = `
+Role: You are an expert embedded systems audio engineer programming a hardware buzzer.
+Task: Translate the user's sound description into a 1D array of frequency values (in Hz).
+Constraints:
+1. Time resolution MUST be exactly 10ms per array element.
+2. Value '0' represents silence (speaker off).
+3. Value > 0 represents frequency in Hz (typical buzzer range: 500 to 4000).
+4. Output format MUST be ONLY comma-separated integers. 
+5. NO Markdown formatting, NO text explanations, NO json wrapping. Just numbers and commas.
+Example Output: 2000, 2000, 2000, 0, 0, 1500, 1500, 1500
+            `.trim();
+
+            const payload = {
+                contents: [{ parts: [{ text: prompt }] }],
+                systemInstruction: { parts: [{ text: systemInstruction }] },
+                generationConfig: { temperature: 0.2 }
+            };
+
+            try {
+                const fullModelPath = modelName.startsWith('models/') ? modelName : `models/${modelName}`;
+                const url = `https://generativelanguage.googleapis.com/v1beta/${fullModelPath}:generateContent?key=${apiKey}`;
+                
+                const result = await fetchWithRetry(url, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                const textResponse = result.candidates?.[0]?.content?.parts?.[0]?.text;
+                if (!textResponse) throw new Error("AI 返回了空結果。");
+
+                const matches = textResponse.match(/\d+/g);
+                if (!matches) throw new Error("無法從 AI 回應中解析出頻率數值，請修改 Prompt 再次嘗試。");
+
+                manualInput.value = matches.join(", ");
+                updateUIStatus('aiStatus', `✅ 成功生成 ${matches.length} 個採樣點 (${(matches.length * 10).toFixed(0)}ms)，請至下方微調或儲存`, 'success');
+                
+                manualInput.style.borderColor = "#ab47bc";
+                setTimeout(() => manualInput.style.borderColor = "#444", 1500);
+
+            } catch (error) {
+                updateUIStatus('aiStatus', `生成失敗: ${error.message}`, 'error');
+            } finally {
+                btn.classList.remove('is-loading');
+                btn.disabled = false;
+            }
+        }
+
+        // ==========================================
+        // 3. Audio Control & Hardware Simulation 
+        // ==========================================
+        function stopAudio() {
+            timeouts.forEach(id => clearTimeout(id));
+            timeouts = [];
+            
+            if (currentGain) {
+                try { currentGain.gain.setTargetAtTime(0, ctx.currentTime, 0.01); } catch(e) {}
+            }
+            if (currentOsc) {
+                try { currentOsc.stop(ctx.currentTime + 0.05); } catch(e) {}
+            }
+            currentOsc = null;
+            
+            document.querySelectorAll('.btn-preset').forEach(b => b.classList.remove('playing'));
+            updateUIStatus('status', "已停止");
+        }
+
+        function playSequence(data, btnElement = null) {
+            initAudioContext();
+            stopAudio();
+
+            updateUIStatus('status', `播放中... (總長度: ${(data.length * 0.01).toFixed(2)}s)`);
+            if(btnElement) btnElement.classList.add('playing');
+
+            const waveType = document.getElementById('waveType').value;
+            const now = ctx.currentTime;
+            
+            const osc = ctx.createOscillator();
+            const gainNode = ctx.createGain();
+            
+            osc.type = waveType;
+            osc.connect(gainNode);
+            gainNode.connect(ctx.destination);
+            
+            gainNode.gain.setValueAtTime(0, now);
+            osc.start(now);
+            
+            currentOsc = osc;
+            currentGain = gainNode;
+            
+            const step = 0.01; 
+
+            data.forEach((freq, index) => {
+                const time = now + (index * step);
+                if (freq > 0) {
+                    osc.frequency.setValueAtTime(freq, time);
+                    gainNode.gain.setValueAtTime(0.3, time);
+                } else {
+                    gainNode.gain.setValueAtTime(0, time);
+                }
+            });
+
+            const endTime = now + (data.length * step);
+            gainNode.gain.setValueAtTime(0, endTime);
+            osc.stop(endTime + 0.1);
+
+            let endTimeout = setTimeout(() => {
+                if(btnElement) btnElement.classList.remove('playing');
+                updateUIStatus('status', "播放完畢");
+            }, (data.length * 10) + 100);
+            
+            timeouts.push(endTimeout);
+        }
+
+        function playManual() {
+            const raw = document.getElementById('manualInput').value;
+            const matches = raw.match(/\d+/g); 
+            
+            if (!matches) {
+                updateUIStatus('status', "錯誤：無法識別數字，請檢查 Raw Data 格式。", "error");
+                return;
+            }
+            playSequence(matches.map(Number));
+        }
+
+        // ==========================================
+        // 4. Library Management (Database Mock)
+        // ==========================================
+        
+        // 完整還原初始的音效庫資料
+        const soundLibrary = [
+            { name: "Winker", id: "ID1", data: [2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 2500, 0, 0, 2500, 2500, 2500, 2500, 2500, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2500, 2500, 0] },
+            { name: "Reverse (Low Speed 1st)", id: "ID2", data: [790, 790, 790, 790, 790, 0, 0, 0, 0, 0, 0, 0, 230, 230, 230, 230, 230, 230, 230, 0, 0, 0, 0, 230, 230, 230, 230, 230, 0, 0, 0, 0, 0, 230, 230, 230, 230, 230, 0, 0, 0, 0, 0, 230, 230, 230, 230, 0, 0, 0, 0, 0, 230, 230, 230, 230, 0, 0, 0, 0, 0, 0, 230, 230, 230, 0, 0, 0, 0, 0, 0, 0, 230, 230, 230, 0] },
+            { name: "Find My Scooter", id: "ID3", data: [1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 0, 0, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 0, 0, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 0] },
+            { name: "Low Speed (2nd)", id: "ID4", data: [2250, 2250, 2250, 2250, 2250, 0, 0, 0, 0, 0, 0, 0, 1900, 1900, 1900, 1900, 1900, 1900, 1900, 0, 0, 0, 0, 1900, 1900, 1900, 1900, 1900, 0, 0, 0, 0, 0, 1900, 1900, 1900, 1900, 1900, 0, 0, 0, 0, 0, 1900, 1900, 1900, 1900, 0, 0, 0, 0, 0, 1900, 1900, 1900, 1900, 0, 0, 0, 0, 0, 0, 1900, 1900, 1900, 0, 0, 0, 0, 0, 0, 0, 1900, 1900, 1900, 0] },
+            { name: "Trunk Open", id: "ID5", data: [2093, 2093, 2093, 2093, 2093, 0, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 0] },
+            { name: "Trunk Close", id: "ID6", data: [2794, 2794, 2794, 2794, 2794, 0, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 0] },
+            { name: "Engine On", id: "ID7", data: [1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 0, 0, 0, 3136, 3136, 3136, 3136, 3136, 0, 0, 0, 2349, 2349, 2349, 2349, 0, 0, 0, 0, 0, 0, 0, 3591, 3591, 3591, 3591, 3591, 3591, 3591, 3591, 3591, 3591, 0] },
+            { name: "Engine Off", id: "ID8", data: [3591, 3591, 3591, 3591, 3591, 3591, 3591, 3591, 3591, 3591, 0, 0, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 0, 0, 0, 0, 0, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 0] },
+            { name: "Kick Stand Up", id: "ID9", data: [1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 0, 0, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 0, 0, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 0] },
+            { name: "Kick Stand Down", id: "ID10", data: [2637, 2637, 2637, 2637, 2637, 2637, 0, 0, 2349, 2349, 2349, 2349, 2349, 2349, 0, 0, 0, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 0, 0, 0, 0, 0, 1568, 1568, 1568, 1568, 1568, 1568, 0, 0, 0, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 0] },
+            { name: "Lock", id: "ID11", data: [1047, 1047, 1047, 1047, 1047, 1047, 1047, 0, 0, 0, 1319, 1319, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 0, 0, 0, 0, 0, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 0] },
+            { name: "Unlock", id: "ID12", data: [2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 0] },
+            { name: "Auto Lock", id: "ID13", data: [2637, 2637, 2637, 0, 0, 1319, 1319, 1319, 0] },
+            { name: "Battery Error", id: "ID14", data: [1109, 1109, 1109, 1245, 1245, 1319, 1319, 1319, 0] },
+            { name: "Low Battery", id: "ID15", data: [1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 0, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 932, 932, 932, 932, 932, 932, 932, 932, 932, 932, 466, 466, 466, 466, 466, 0] },
+            { name: "Over Speed", id: "ID16", data: [2794, 2794, 2794, 2794, 2794, 0, 0, 0, 0, 0, 0, 0, 2794, 2794, 2794, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2794, 2794, 0] },
+            { name: "Sport Mode On", id: "ID17", data: [1760, 1760, 0, 1976, 1976, 1976, 1568, 1568, 1568, 1568, 1568, 1568, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 0] },
+            { name: "Sport Mode Off", id: "ID18", data: [2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 0, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 0] },
+            { name: "Confirm Beep", id: "ID19", data: [2093, 0, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 0] },
+            { name: "Birthday On", id: "ID20", data: [1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 0, 0, 0, 0, 0, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 0, 0, 0, 0, 0, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 0, 0, 0, 0, 0, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 0, 0, 0, 0, 0, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 0, 0, 0, 0, 0, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 0, 0, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 0, 0, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 1175, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 0, 0, 0, 0, 0, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 0, 0, 0, 0, 0, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 0, 0, 0, 0, 0, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 0, 0, 0, 0, 0, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 0, 0, 0, 0, 0, 0, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 0, 0, 0, 0, 0, 0, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1480, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 3136, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 1319, 0, 0, 0, 0, 0, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 1047, 0, 0, 0, 0, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 1976, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 988, 0, 0, 0, 0, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 880, 880, 880, 880, 880, 880, 880, 880, 880, 880, 880, 880, 880, 880, 880, 880, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2794, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 2637, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 0, 0, 0, 0, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 0, 0, 0, 0, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 2349, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 784, 2349, 0, 0, 0, 0, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 0] },
+            { name: "Christmas On", id: "ID22", data: [1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 523, 698, 698, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 523, 698, 698, 698, 698, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 523, 698, 698, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 523, 698, 698, 698, 698, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 523, 698, 698, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 523, 698, 698, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 0, 0, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 523, 698, 698, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 523, 698, 698, 0, 0, 0, 0, 0, 0, 0, 587, 784, 784, 784, 784, 784, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 523, 698, 698, 698, 698, 698, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 698, 932, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 698, 932, 932, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1865, 1865, 1865, 1865, 1865, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 659, 880, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 659, 880, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 1760, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 784, 1047, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 2093, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 1865, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 587, 784, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 1568, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 1397, 523, 698, 698, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 262, 349, 349, 349, 349, 349, 0] }
+        ];
+
+        const libContainer = document.getElementById('libraryContainer');
+        
+        // 將資料渲染成按鈕的功能 (抽出共用函數以便動態新增)
+        function renderLibraryButton(item, isCustom = false) {
+            let btn = document.createElement('button');
+            btn.className = `btn-preset ${isCustom ? 'custom-preset' : ''}`;
+            btn.innerHTML = `${item.name} <span>${item.id}</span>`;
+            btn.onclick = () => {
+                document.getElementById('manualInput').value = item.data.join(', ');
+                playSequence(item.data, btn);
+            };
+            libContainer.appendChild(btn);
+        }
+
+        // 初始渲染所有預設音效
+        soundLibrary.forEach(item => renderLibraryButton(item));
+
+        // 新增至音效庫功能
+        function saveToLibrary() {
+            const name = document.getElementById('newSoundName').value.trim();
+            const id = document.getElementById('newSoundId').value.trim();
+            const raw = document.getElementById('manualInput').value;
+            const matches = raw.match(/\d+/g);
+
+            if (!name || !id) {
+                updateUIStatus('status', "錯誤：請輸入音效名稱與代號 (ID)", "error");
+                return;
+            }
+            if (!matches || matches.length === 0) {
+                updateUIStatus('status', "錯誤：Raw Data 窗格中沒有可儲存的數值", "error");
+                return;
+            }
+
+            const data = matches.map(Number);
+            const newItem = { name, id, data };
+            
+            // 推入記憶體資料庫
+            soundLibrary.push(newItem);
+            
+            // 渲染 UI (標記為 custom)
+            renderLibraryButton(newItem, true);
+
+            // 狀態回饋與清空輸入框
+            updateUIStatus('status', `✅ 已將「${name}」儲存至音效庫`, "success");
+            document.getElementById('newSoundName').value = '';
+            document.getElementById('newSoundId').value = '';
+        }
+
+    </script>
+</body>
+</html>
+apps-fileview.texmex_20260603.06_p1
+平台4_音效模擬器.html
+目前顯示的是「平台4_音效模擬器.html」。
