@@ -1,0 +1,821 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GGR PXU-PCBA 1211B 空間應力戰術管制地圖 (完整版)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom colors for light mode */
+        :root {
+            --cyan-primary: #0284c7; /* blue-600 */
+            --rose-primary: #dc2626; /* red-600 */
+            --emerald-primary: #059669; /* emerald-600 */
+            --amber-primary: #d97706; /* amber-600 */
+        }
+        /* Utility classes */
+        .text-cyan-primary { color: var(--cyan-primary); }
+        .bg-cyan-primary { background-color: var(--cyan-primary); }
+        .text-rose-primary { color: var(--rose-primary); }
+        .bg-rose-primary { background-color: var(--rose-primary); }
+        .text-emerald-primary { color: var(--emerald-primary); }
+        .bg-emerald-primary { background-color: var(--emerald-primary); }
+        .text-amber-primary { color: var(--amber-primary); }
+        .bg-amber-primary { background-color: var(--amber-primary); }
+        
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--emerald-primary);
+            cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+        }
+    </style>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        cyan: { primary: '#0284c7' },
+                        rose: { primary: '#dc2626' },
+                        emerald: { primary: '#059669' },
+                        amber: { primary: '#d97706' },
+                    }
+                }
+            }
+        }
+    </script>
+</head>
+<body class="bg-slate-50 text-slate-900 p-4 md:p-8 font-sans select-none overflow-x-hidden">
+
+    <!-- ================= HEADER ================= -->
+    <header class="border-b border-slate-200 pb-5 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+            <div class="flex items-center gap-2 text-cyan-primary font-mono text-xs tracking-widest mb-1">
+                <!-- Cpu Icon -->
+                <svg class="w-4 h-4 animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path></svg>
+                <span>JARVIS MULTI-AGENT SYSTEM // PCBA ANALYZER V1.7 (HTML)</span>
+            </div>
+            <h1 class="text-2xl md:text-3xl font-extrabold text-slate-950 flex items-center gap-2">
+                GGR 1211B-PXU動力板(R08) 應力與SPC管制中心
+            </h1>
+            <p class="text-slate-600 text-sm mt-1">
+                整合實物幾何定位與 30 PCS 統計數據 (2026/04/20)。
+            </p>
+        </div>
+        
+        <!-- Interactive Controls HUD -->
+        <div class="flex flex-wrap gap-3 items-center bg-white p-3 rounded-2xl border border-slate-200 shadow-sm">
+            <div class="flex items-center gap-2 px-3 py-1 border-r border-slate-100">
+                <!-- Sliders Icon -->
+                <svg class="w-4 h-4 text-cyan-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+                <span class="text-xs font-mono text-slate-500">管制上限 (USL):</span>
+                <input type="number" id="uslInput" step="0.01" value="0.60" class="w-20 bg-slate-50 text-cyan-primary font-bold font-mono text-sm border border-cyan-200 rounded px-2 py-1 text-center focus:outline-none focus:border-cyan-500 transition-colors">
+                <span class="text-xs text-slate-500">mm</span>
+            </div>
+            <button id="resetBtn" class="p-2 text-slate-400 hover:text-cyan-primary hover:bg-slate-50 rounded-full transition-all" title="重設至預設值">
+                <!-- RefreshCw Icon -->
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- ================= PCB MAP & DYNAMIC HUD SECTION ================= -->
+    <section class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+        
+        <!-- PCB Interactive Map Card -->
+        <div class="lg:col-span-2 bg-white border border-slate-200 rounded-3xl p-6 relative overflow-hidden shadow-md">
+             <!-- Background Pattern -->
+             <svg class="absolute -bottom-10 -right-10 w-48 h-48 text-emerald-50 pointer-events-none" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z"></path></svg>
+            
+            <div class="flex justify-between items-center mb-6">
+                <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                    <svg class="w-5 h-5 text-emerald-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    實物幾何量測點分佈與應力應變圖
+                </h3>
+                <span class="font-mono text-xs text-emerald-700 bg-emerald-50 px-3 py-1.5 rounded-full border border-emerald-100 font-medium">PCB ID: 1211B-PXU-04-R08</span>
+            </div>
+
+            <!-- Stylized PCB Visual (Light Mode) -->
+            <div class="relative aspect-[2.6/1] bg-emerald-50/50 border-2 border-emerald-200/60 rounded-2xl p-5 shadow-inner overflow-hidden">
+                <div class="absolute inset-0 bg-gradient-to-r from-emerald-100/20 via-transparent to-rose-100/30 pointer-events-none mix-blend-multiply"></div>
+                
+                <!-- Board Text Info -->
+                <div class="absolute bottom-2 left-4 font-mono text-[9px] text-emerald-700/50 font-bold">
+                    GOGORO // DESIGNER TOMMY CHEN // R&D POWER BOARD
+                </div>
+
+                <!-- Main Power Terminals -->
+                <div class="absolute inset-x-0 top-1/2 -translate-y-1/2 flex justify-around pointer-events-none px-10">
+                    <div class="w-14 h-14 rounded-full bg-slate-200 border-4 border-slate-300 flex items-center justify-center shadow relative"><div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200"><div class="w-3 h-3 rounded-full bg-slate-400"></div></div></div>
+                    <div class="w-14 h-14 rounded-full bg-slate-200 border-4 border-slate-300 flex items-center justify-center shadow relative"><div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200"><div class="w-3 h-3 rounded-full bg-slate-400"></div></div></div>
+                    <div class="w-14 h-14 rounded-full bg-slate-200 border-4 border-slate-300 flex items-center justify-center shadow relative"><div class="w-6 h-6 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200"><div class="w-3 h-3 rounded-full bg-slate-400"></div></div></div>
+                </div>
+
+                <!-- INTERACTIVE PINS -->
+                <!-- PIN 1 -->
+                <button id="pin-p1" class="absolute w-9 h-9 flex items-center justify-center rounded-full border-2 border-emerald-300 bg-white/90 shadow-sm transition-all hover:scale-125 hover:border-cyan-primary hover:shadow-md hover:z-20 group" style="top: 10px; left: 12px;">
+                    <span id="marker-p1" class="w-2.5 h-2.5 rounded-full bg-emerald-primary group-hover:bg-cyan-primary transition-colors"></span>
+                    <span class="absolute -bottom-4 text-[9px] font-mono text-slate-500 font-black bg-white/80 px-1 rounded whitespace-nowrap">點1</span>
+                </button>
+                 <!-- PIN 2 -->
+                <button id="pin-p2" class="absolute w-9 h-9 flex items-center justify-center rounded-full border-2 border-emerald-300 bg-white/90 shadow-sm transition-all hover:scale-125 hover:border-cyan-primary hover:shadow-md hover:z-20 group" style="top: 8px; left: 50%; transform: translateX(-50%);">
+                    <span id="marker-p2" class="w-2.5 h-2.5 rounded-full bg-emerald-primary group-hover:bg-cyan-primary transition-colors"></span>
+                    <span class="absolute -bottom-4 text-[9px] font-mono text-slate-500 font-black bg-white/80 px-1 rounded whitespace-nowrap">點2</span>
+                </button>
+                 <!-- PIN 3 -->
+                <button id="pin-p3" class="absolute w-9 h-9 flex items-center justify-center rounded-full border-2 border-rose-300 bg-white/90 shadow-sm transition-all hover:scale-125 hover:border-rose-primary hover:shadow-md hover:z-20 group" style="top: 10px; right: 12px;">
+                    <span id="marker-p3" class="w-2.5 h-2.5 rounded-full bg-rose-primary animate-pulse group-hover:scale-110 transition-colors"></span>
+                    <span class="absolute -bottom-4 text-[9px] font-mono text-rose-primary font-black bg-white/80 px-1 rounded whitespace-nowrap">點3</span>
+                </button>
+                 <!-- PIN 4 -->
+                <button id="pin-p4" class="absolute w-9 h-9 flex items-center justify-center rounded-full border-2 border-rose-300 bg-white/90 shadow-sm transition-all hover:scale-125 hover:border-rose-primary hover:shadow-md hover:z-20 group" style="bottom: 15px; right: 12px;">
+                    <span id="marker-p4" class="w-2.5 h-2.5 rounded-full bg-rose-primary animate-pulse group-hover:scale-110 transition-colors"></span>
+                    <span class="absolute -top-4 text-[9px] font-mono text-rose-primary font-black bg-white/80 px-1 rounded whitespace-nowrap">點4</span>
+                </button>
+            </div>
+            
+            <!-- Legend -->
+            <div class="mt-5 flex flex-col md:flex-row justify-between items-center bg-slate-100 p-3 rounded-xl border border-slate-200 text-xs font-mono gap-2">
+                <div class="flex items-center gap-1.5 text-emerald-600">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                    <span>左側基準端 (Cpk穩定)</span>
+                </div>
+                <div class="flex items-center gap-2 text-cyan-600 animate-pulse font-bold">
+                    <span>應力傾斜軸 Axis-Tilt X ➜➜➜</span>
+                </div>
+                <div class="flex items-center gap-1.5 text-rose-600 animate-pulse font-bold">
+                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+                    <span>右側懸空端 (Cpk不足)</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Dynamic Point HUD Card -->
+        <div class="bg-white border border-slate-200 rounded-3xl p-6 flex flex-col justify-between shadow-md relative">
+             <!-- Alert Icon positioned absolutely -->
+             <svg id="hud-alert-icon" class="w-6 h-6 text-rose-primary absolute top-6 right-6 hidden animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+
+            <div class="flex items-center justify-between gap-3 mb-4 pr-8">
+                <h3 id="hud-title" class="text-sm font-bold text-slate-500 uppercase tracking-wider font-mono">
+                    請在地圖上移動滑鼠
+                </h3>
+            </div>
+            
+            <!-- Empty State -->
+            <div id="hud-empty" class="h-48 flex flex-col items-center justify-center text-center text-slate-500 gap-3 p-6 border-2 border-slate-200 border-dashed rounded-2xl bg-slate-50/50">
+                <svg class="w-8 h-8 text-slate-400 animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"></path><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"></path></svg>
+                <span class="text-xs font-medium">將滑鼠移至左側 PCB 圖上的量測點 (1, 2, 3, 4)，即時顯示動態 SPC 特徵。</span>
+            </div>
+
+            <!-- Data Content State -->
+            <div id="hud-content" class="space-y-5 hidden">
+                <div class="font-mono">
+                    <span id="hud-mean" class="text-4xl font-black tracking-tight text-slate-900">0.000</span>
+                    <span class="text-xs text-slate-500 ml-1 font-bold">mm (平均)</span>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-3 text-xs font-mono">
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <span class="text-slate-500 block mb-1">最大值 Max</span>
+                        <span id="hud-max" class="text-sm font-black text-slate-700">0.00 mm</span>
+                    </div>
+                    <div class="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                        <span class="text-slate-500 block mb-1">標準差 $\sigma$</span>
+                        <span id="hud-stddev" class="text-sm font-black text-slate-700">0.0000</span>
+                    </div>
+                </div>
+
+                <div id="hud-cpk-card" class="bg-slate-100 p-4 rounded-2xl border border-slate-200 space-y-2 transition-colors">
+                    <div class="flex items-center justify-between font-mono">
+                        <span class="text-[11px] font-black text-slate-500">製程能力指標 Cpk</span>
+                        <span id="hud-cpk" class="text-2xl font-black text-slate-900">0.00</span>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px]">
+                        <span class="text-slate-500 font-medium">評估狀態</span>
+                        <span id="hud-eval" class="font-black text-slate-700">---</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- ================= METRICS CARDS SECTION ================= -->
+    <section class="grid grid-cols-1 md:grid-cols-4 gap-5 mb-8">
+        <!-- Card 1: Total OOS -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-between shadow-sm transition-all hover:shadow-md hover:border-rose-200 group">
+            <div class="flex justify-between items-start">
+                <span class="text-sm font-semibold text-slate-500">總體 OOS 超標率</span>
+                <svg id="oos-icon" class="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+            </div>
+            <div class="my-3">
+                <div id="total-oos-rate" class="text-3xl font-black text-slate-900 font-mono tracking-tight">0.0%</div>
+                <p id="total-oos-detail" class="text-xs text-slate-500 mt-1 font-medium">共有 0 點次超標 / 120 總點次</p>
+            </div>
+            <div class="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                <div id="total-oos-bar" class="h-full bg-amber-500 transition-all duration-500" style="width: 0%"></div>
+            </div>
+        </div>
+
+        <!-- Card 2: Worst Point -->
+        <div class="bg-white border-2 border-rose-100 rounded-2xl p-5 flex flex-col justify-between shadow-sm transition-all hover:shadow-md hover:border-rose-300">
+            <div class="flex justify-between items-start">
+                <span class="text-sm font-semibold text-slate-500">幾何致命失效點</span>
+                <span class="px-2 py-0.5 text-[10px] font-mono font-bold bg-rose-100 text-rose-primary rounded-full">RIGHT-SIDE</span>
+            </div>
+            <div class="my-3">
+                <div id="worst-point-name" class="text-2xl font-black text-rose-primary font-mono tracking-tight">---</div>
+                <p id="worst-point-cpk" class="text-xs text-slate-600 mt-1 font-bold">Cpk 僅有 0.00 (嚴重崩潰)</p>
+            </div>
+             <p class="text-xs text-rose-600/80 font-medium flex items-center gap-1.5 bg-rose-50 p-1.5 rounded-lg">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                右側高電流端子區，殘留剪切力極大
+            </p>
+        </div>
+
+        <!-- Card 3: Tilt Info -->
+        <div class="bg-white border border-slate-200 rounded-2xl p-5 flex flex-col justify-between shadow-sm transition-all hover:shadow-md hover:border-cyan-200">
+             <div class="flex justify-between items-start">
+                <span class="text-sm font-semibold text-slate-500">X-Axis 單側傾斜差</span>
+                <svg class="w-5 h-5 text-cyan-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"></path></svg>
+            </div>
+             <div class="my-3">
+                <div class="text-3xl font-black text-cyan-primary font-mono tracking-tight">
+                    <span id="tilt-value">0.38</span><span class="text-base ml-1">mm</span>
+                </div>
+                <p class="text-xs text-slate-500 mt-1 font-medium">(點3+4平均) - (點1+2平均)</p>
+            </div>
+             <p class="text-xs text-cyan-700/80 font-medium flex items-center gap-1.5 bg-cyan-50 p-1.5 rounded-lg">
+                <svg class="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+                物理機制：典型的單側懸臂式熱應力翹曲
+            </p>
+        </div>
+
+        <!-- Card 4: Optimization Slider (Interactive) -->
+        <div class="bg-white border border-emerald-100 rounded-2xl p-5 shadow-sm transition-all hover:shadow-md hover:border-emerald-300 bg-emerald-50/30">
+             <div class="flex justify-between items-start mb-4">
+                <span class="text-sm font-semibold text-slate-600">SMT 製程優化模擬 (變異降噪)</span>
+                 <svg class="w-5 h-5 text-emerald-primary animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"></path></svg>
+            </div>
+            <div class="text-xs text-slate-500 mb-2 flex justify-between font-medium">
+                <span>縮減變異 ($\sigma$ 乘數):</span>
+                <span id="opt-value-display" class="font-mono text-emerald-600 font-bold">0% (原始)</span>
+            </div>
+            <input type="range" id="optSlider" min="0.3" max="1.2" step="0.1" value="1.0" class="w-full h-2 bg-slate-200 rounded-lg appearance-none outline-none">
+            <div class="flex justify-between text-[10px] text-slate-400 mt-2 font-mono">
+                <span>降噪 70%</span><span>正常(原始)</span><span>放大變異</span>
+            </div>
+             <p class="text-[11px] text-emerald-700 mt-3 leading-tight font-medium bg-emerald-100/50 p-2 rounded-lg border border-emerald-200/50">
+                提示：調整滑桿模擬降低 SMT Reflow 鏈條震動或應力，觀察下方 Cpk 的變化。
+            </p>
+        </div>
+    </section>
+
+    <!-- ================= TABS CONTROLLER ================= -->
+    <div class="flex gap-2 mb-6 border-b border-slate-200 pb-3 overflow-x-auto">
+        <button class="tab-btn px-4 py-2.5 rounded-xl font-bold text-sm transition-all bg-cyan-50 text-cyan-700 border border-cyan-200 shadow-sm" data-tab="summary">
+            製程能力 Cpk 分佈
+        </button>
+        <button class="tab-btn px-4 py-2.5 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-900 hover:bg-slate-100" data-tab="runchart">
+            管制圖 (Run Chart)
+        </button>
+        <button class="tab-btn px-4 py-2.5 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-900 hover:bg-slate-100" data-tab="insights">
+            第一性原理診斷對策
+        </button>
+    </div>
+
+    <!-- ================= TAB CONTENT: SUMMARY CPK ================= -->
+    <div id="tab-content-summary" class="tab-content block space-y-6 animate-fadeIn">
+        <div id="cpk-cards-container" class="grid grid-cols-1 md:grid-cols-4 gap-5">
+            <!-- Cpk Cards will be rendered here by JS -->
+        </div>
+    </div>
+
+    <!-- ================= TAB CONTENT: RUN CHART (Interactive) ================= -->
+    <div id="tab-content-runchart" class="tab-content hidden space-y-6 animate-fadeIn">
+        <div class="bg-white border border-slate-200 rounded-3xl p-6 shadow-md">
+            <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
+                <div>
+                    <h3 class="text-base font-bold text-slate-900 flex items-center gap-2">
+                        <svg class="w-5 h-5 text-cyan-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z"></path></svg>
+                        樣本間隙量走勢管制圖 (Run Chart)
+                    </h3>
+                    <p class="text-sm text-slate-500 mt-1 font-medium">實線為 30 個樣本走勢。紅虛線為規格上限 USL (<span class="usl-display">0.60</span> mm)。</p>
+                </div>
+                
+                <!-- Chart Point Toggles -->
+                <div class="flex gap-1 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
+                    <button class="chart-filter-btn px-3 py-1.5 text-xs rounded-lg transition-all font-mono font-bold uppercase bg-cyan-100 text-cyan-800 border border-cyan-200 shadow-sm" data-point="all">全部點</button>
+                    <button class="chart-filter-btn px-3 py-1.5 text-xs rounded-lg transition-all font-mono font-bold uppercase text-slate-500 hover:bg-white" data-point="p1">點 1</button>
+                    <button class="chart-filter-btn px-3 py-1.5 text-xs rounded-lg transition-all font-mono font-bold uppercase text-slate-500 hover:bg-white" data-point="p2">點 2</button>
+                    <button class="chart-filter-btn px-3 py-1.5 text-xs rounded-lg transition-all font-mono font-bold uppercase text-slate-500 hover:bg-white" data-point="p3">點 3</button>
+                    <button class="chart-filter-btn px-3 py-1.5 text-xs rounded-lg transition-all font-mono font-bold uppercase text-slate-500 hover:bg-white" data-point="p4">點 4</button>
+                </div>
+            </div>
+
+            <!-- The Chart Container -->
+            <div class="h-96 w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 flex flex-col justify-between relative overflow-hidden">
+                
+                <!-- Y Axis Labels & Grid -->
+                <div class="absolute left-2 right-2 top-4 bottom-8 flex flex-col justify-between pointer-events-none font-mono text-xs font-medium text-slate-400 z-0">
+                    <!-- Grid lines generated by JS -->
+                    <div id="chart-grid-container" class="h-full flex flex-col justify-between relative"></div>
+                </div>
+
+                <!-- Data Points Container (Bars/Dots) -->
+                <div id="chart-data-container" class="absolute left-12 right-4 top-4 bottom-8 flex justify-between items-end z-10 pl-2">
+                    <!-- Data points generated by JS -->
+                </div>
+
+                <!-- USL Line (Dynamic) -->
+                <div id="chart-usl-line" class="absolute left-12 right-2 border-t-2 border-dashed border-rose-400/80 z-20 transition-all duration-500" style="bottom: 85%;">
+                    <span class="absolute right-0 -top-3 text-[10px] font-mono text-rose-500 px-1.5 py-0.5 bg-rose-50 rounded font-bold border border-rose-100">USL (<span class="usl-display">0.60</span>)</span>
+                </div>
+            </div>
+
+            <!-- Chart Legend -->
+            <div class="mt-6 flex flex-wrap gap-5 justify-center text-xs font-medium font-mono bg-slate-50 p-3 rounded-xl border border-slate-100">
+                <div class="flex items-center gap-2"><span class="w-3 h-3 bg-cyan-400 rounded-full ring-2 ring-cyan-100 block"></span><span class="text-slate-600">點 1 (左上)</span></div>
+                <div class="flex items-center gap-2"><span class="w-3 h-3 bg-indigo-400 rounded-full ring-2 ring-indigo-100 block"></span><span class="text-slate-600">點 2 (上中)</span></div>
+                <div class="flex items-center gap-2"><span class="w-3 h-3 bg-amber-400 rounded-full ring-2 ring-amber-100 block"></span><span class="text-slate-600">點 3 (右上)</span></div>
+                <div class="flex items-center gap-2"><span class="w-3 h-3 bg-rose-400 rounded-full ring-2 ring-rose-100 block"></span><span class="text-slate-600">點 4 (右下)</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= TAB CONTENT: INSIGHTS (Static Analysis) ================= -->
+    <div id="tab-content-insights" class="tab-content hidden space-y-6 animate-fadeIn">
+        <div class="bg-white border border-slate-200 rounded-3xl p-8 shadow-md">
+            <h3 class="text-lg font-bold text-slate-900 mb-8 flex items-center gap-3">
+                <svg class="w-6 h-6 text-cyan-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.674M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 01-2 2h-2a2 2 0 01-2-2v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"></path></svg>
+                基於幾何應力對稱性之診斷報告與戰術對策 (Action Plan)
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 text-sm text-slate-700 leading-relaxed">
+                <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-3 shadow-sm">
+                    <h4 class="text-base font-black text-slate-900 flex items-center gap-2">
+                        <span class="text-cyan-primary">📌 1. 幾何非對稱性：X軸向單側傾斜排除</span>
+                    </h4>
+                    <p class="text-slate-600 font-medium">
+                        數據顯示點 3、4（右半邊平均 >0.58mm）顯著大於左半邊 1、2（平均 <0.25mm）。在幾何上這不是局部凹陷，而是典型的翹曲傾斜。
+                    </p>
+                    <ul class="list-disc list-inside mt-3 text-xs text-slate-600 space-y-2 font-bold">
+                        <li><span class="text-slate-800">優先：治具水平度核對：</span> 厚薄規量測治具本身右側支撐點是否有加工偏差或積碳，導致板子放上去時天然右側翹起。GR&R 測試必須執行。</li>
+                        <li><span class="text-slate-800">次要：Reflow 單側熱收縮補償：</span> 若治具排除，即確認為 PCBA 殘留應力。右側為主端子高銅密度區，熱容極大。冷卻時若軌道張力不均或冷卻溫差過大，會拉出固定方向的彎矩。優化 SMT Reflow 的冷卻斜率。</li>
+                    </ul>
+                </div>
+
+                <div class="bg-slate-50 p-6 rounded-2xl border border-slate-100 space-y-3 shadow-sm">
+                    <h4 class="text-base font-black text-slate-900 flex items-center gap-2">
+                        <span class="text-rose-primary">⚠️ 2. 銲點應力疲勞與組裝鎖附失效預防</span>
+                    </h4>
+                    <p class="text-slate-600 font-medium">
+                        由於這張 1211B 是大電流動力板，右側上翹意味著，當 PCBA 裝配至車輛外殼時，必須通過螺絲強行鎖附壓平間隙。
+                    </p>
+                    <ul class="list-disc list-inside mt-3 text-xs text-slate-600 space-y-2 font-bold">
+                        <li><span class="text-rose-600">MLCC 銲點開裂風險：</span> 右半側的 SMD 元件銲點（MOSFET、MLCC）將承受強迫扭轉公差產生的永久性剪切應力。</li>
+                        <li><span class="text-slate-800">失效模式：</span> 在 GGR 高頻震動下，銲點疲勞速度將顯著加快，易導致電容裂、MOSFET 銲點失效斷裂。Cpk 長期不足 1.0 的板子，Layout 改版前應在右側零件增加 <span class="bg-rose-100 text-rose-800 px-1 rounded">Underfill (底膠充填)</span>。</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ================= FOOTER ================= -->
+    <footer class="mt-10 pt-5 border-t border-slate-200 text-center text-slate-500 text-xs font-mono font-medium">
+        DATA ANALYZED BY JARVIS AGENT CO-PILOT. GEOMETRIC LINKED COMPLETED. HTML PORT V1.7 (LIGHT).
+    </footer>
+
+
+    <!-- ================= JAVASCRIPT CORE ENGINE ================= -->
+    <script>
+        // --- 1. RAW DATA & STATE ---
+        const rawData = [
+          { id: 1, sn: "12110-PXU-0401262900931", p1: 0.14, p2: 0.28, p3: 0.53, p4: 0.53 },
+          { id: 2, sn: "12110-PXU-0401262900267", p1: 0.10, p2: 0.25, p3: 0.53, p4: 0.53 },
+          { id: 3, sn: "12110-PXU-0401262900156", p1: 0.25, p2: 0.25, p3: 0.53, p4: 0.53 },
+          { id: 4, sn: "12110-PXU-0401262900123", p1: 0.20, p2: 0.18, p3: 0.53, p4: 0.53 },
+          { id: 5, sn: "12110-PXU-0401262900328", p1: 0.20, p2: 0.20, p3: 0.53, p4: 0.53 },
+          { id: 6, sn: "12110-PXU-0401262901060", p1: 0.45, p2: 0.28, p3: 0.60, p4: 0.60 },
+          { id: 7, sn: "12110-PXU-0401262900719", p1: 0.28, p2: 0.23, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 8, sn: "12110-PXU-0401262900154", p1: 0.28, p2: 0.33, p3: 0.60, p4: 0.60 },
+          { id: 9, sn: "12110-PXU-0401262900671", p1: 0.53, p2: 0.58, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 10, sn: "12110-PXU-0401262900151", p1: 0.43, p2: 0.30, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 11, sn: "12110-PXU-0401262900793", p1: 0.13, p2: 0.20, p3: 0.53, p4: 0.53 },
+          { id: 12, sn: "12110-PXU-0401262900054", p1: 0.35, p2: 0.35, p3: 0.53, p4: 0.53 },
+          { id: 13, sn: "12110-PXU-0401262900998", p1: 0.45, p2: 0.35, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 14, sn: "12110-PXU-0401262900296", p1: 0.05, p2: 0.25, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 15, sn: "12110-PXU-0401262900944", p1: 0.08, p2: 0.20, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 16, sn: "12110-PXU-0401262900829", p1: 0.08, p2: 0.08, p3: 0.53, p4: 0.53 },
+          { id: 17, sn: "12110-PXU-0401262900979", p1: 0.13, p2: 0.20, p3: 0.60, p4: 0.60 },
+          { id: 18, sn: "12110-PXU-0401262900391", p1: 0.00, p2: 0.10, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 19, sn: "12110-PXU-0401262900438", p1: 0.63, p2: 0.30, p3: 0.53, p4: 0.53 },
+          { id: 20, sn: "12110-PXU-0401262900648", p1: 0.02, p2: 0.35, p3: 0.53, p4: 0.53 },
+          { id: 21, sn: "12110-PXU-0401262900635", p1: 0.00, p2: 0.20, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 22, sn: "12110-PXU-0401262900358", p1: 0.00, p2: 0.35, p3: 0.60, p4: 0.63, highlighted: true },
+          { id: 23, sn: "12110-PXU-0401262900709", p1: 0.10, p2: 0.10, p3: 0.53, p4: 0.53 },
+          { id: 24, sn: "12110-PXU-0401262900586", p1: 0.08, p2: 0.20, p3: 0.60, p4: 0.58 },
+          { id: 25, sn: "12110-PXU-0401262900153", p1: 0.20, p2: 0.20, p3: 0.55, p4: 0.55 },
+          { id: 26, sn: "12110-PXU-0401262900122", p1: 0.00, p2: 0.43, p3: 0.58, p4: 0.58 },
+          { id: 27, sn: "12110-PXU-0401262900703", p1: 0.20, p2: 0.06, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 28, sn: "12110-PXU-0401262900389", p1: 0.06, p2: 0.10, p3: 0.60, p4: 0.60 },
+          { id: 29, sn: "12110-PXU-0401262900424", p1: 0.03, p2: 0.30, p3: 0.63, p4: 0.63, highlighted: true },
+          { id: 30, sn: "12110-PXU-0401262900741", p1: 0.30, p2: 0.20, p3: 0.60, p4: 0.60 }
+        ];
+
+        let currentUsl = 0.60;
+        const lsl = 0.00;
+        let optimizationMultiplier = 1.0;
+        let activeTab = 'summary';
+        let selectedChartPoint = 'all';
+
+        // Calculated Statistics Storage
+        let calculatedStats = {};
+        let overallStats = {};
+
+
+        // --- 2. CORE CALCULATION LOGIC (Ported from React useMemo) ---
+        function calculateStats() {
+            const points = ['p1', 'p2', 'p3', 'p4'];
+            const result = {};
+            
+            // Point Names Mapping
+            const pointNames = {
+                'p1': '點 1 (左上角)',
+                'p2': '點 2 (上中)',
+                'p3': '點 3 (右上角)',
+                'p4': '點 4 (右下)'
+            };
+
+            points.forEach(p => {
+                const vals = rawData.map(d => d[p]);
+                const n = vals.length;
+                const sum = vals.reduce((a, b) => a + b, 0);
+                const mean = sum / n;
+                
+                const variance = vals.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / (n - 1);
+                const stdDev = Math.sqrt(variance) * optimizationMultiplier;
+                
+                const max = Math.max(...vals);
+                const min = Math.min(...vals);
+
+                const cpu = (currentUsl - mean) / (3 * stdDev);
+                const cpl = (mean - lsl) / (3 * stdDev);
+                const cpk = Math.min(cpu, cpl);
+
+                const oosCount = vals.filter(v => v > currentUsl || v < lsl).length;
+                const oosRate = (oosCount / n) * 100;
+
+                result[p] = {
+                    name: pointNames[p],
+                    mean,
+                    stdDev,
+                    max,
+                    min,
+                    cpk,
+                    oosCount,
+                    oosRate
+                };
+            });
+            calculatedStats = result;
+
+            // Calculate Overall Stats
+            let totalPoints = 0;
+            let totalOos = 0;
+            rawData.forEach(d => {
+                points.forEach(p => {
+                    totalPoints++;
+                    if (d[p] > currentUsl || d[p] < lsl) totalOos++;
+                });
+            });
+
+            let worstPKey = 'p1';
+            let minCpk = Infinity;
+            Object.keys(calculatedStats).forEach(pKey => {
+                if (calculatedStats[pKey].cpk < minCpk) {
+                    minCpk = calculatedStats[pKey].cpk;
+                    worstPKey = pKey;
+                }
+            });
+
+            overallStats = {
+                totalOos,
+                totalPoints,
+                overallOosRate: (totalOos / totalPoints) * 100,
+                worstPName: calculatedStats[worstPKey].name.split(' ')[0] + ' ' + calculatedStats[worstPKey].name.split(' ')[1], // e.g., "點 3"
+                worstPCpk: calculatedStats[worstPKey].cpk,
+                tiltValue: ((calculatedStats.p3.mean + calculatedStats.p4.mean)/2 - (calculatedStats.p1.mean + calculatedStats.p2.mean)/2).toFixed(2)
+            };
+        }
+
+        function getCpkLevel(cpk) {
+            if (cpk >= 1.33) return { text: '優秀A+', colorClass: 'text-emerald-600', bgClass: 'bg-emerald-500', borderClass: 'border-emerald-200' };
+            if (cpk >= 1.0) return { text: '勉強合格B', colorClass: 'text-amber-600', bgClass: 'bg-amber-500', borderClass: 'border-amber-200' };
+            if (cpk > 0) return { text: '嚴重不足C', colorClass: 'text-rose-600', bgClass: 'bg-rose-500', borderClass: 'border-rose-200' };
+            return { text: '製程崩潰F', colorClass: 'text-rose-800', bgClass: 'bg-rose-700', borderClass: 'border-rose-300' };
+        }
+
+
+        // --- 3. UI RENDRING FUNCTIONS ---
+
+        // Update Top Metrics Cards
+        function updateMetricsUI() {
+            // USL Displays
+            document.querySelectorAll('.usl-display').forEach(el => el.innerText = currentUsl.toFixed(2));
+
+            // Card 1: Total OOS
+            const oosRateStr = overallStats.overallOosRate.toFixed(1);
+            document.getElementById('total-oos-rate').innerText = `${oosRateStr}%`;
+            document.getElementById('total-oos-detail').innerText = `共有 ${overallStats.totalOos} 點次超標 / ${overallStats.totalPoints} 總點次`;
+            const oosBar = document.getElementById('total-oos-bar');
+            oosBar.style.width = `${Math.min(100, overallStats.overallOosRate)}%`;
+            oosBar.className = `h-full transition-all duration-500 ${overallStats.overallOosRate > 10 ? 'bg-rose-500' : 'bg-amber-500'}`;
+            document.getElementById('oos-icon').className = `w-5 h-5 ${overallStats.overallOosRate > 10 ? 'text-rose-500 animate-pulse' : 'text-amber-500'}`;
+
+            // Card 2: Worst Point
+            document.getElementById('worst-point-name').innerText = overallStats.worstPName;
+            document.getElementById('worst-point-cpk').innerText = `Cpk 僅有 ${overallStats.worstPCpk.toFixed(2)} (${getCpkLevel(overallStats.worstPCpk).text})`;
+
+            // Card 3: Tilt
+            document.getElementById('tilt-value').innerText = overallStats.tiltValue;
+
+            // Card 4: Slider Display text
+            const optSlider = document.getElementById('optSlider');
+            const optValueDisplay = document.getElementById('opt-value-display');
+            const reduction = ((1 - optimizationMultiplier) * 100).toFixed(0);
+            let reductionText = "";
+            if (reduction > 0) reductionText = `-${reduction}% (優化)`;
+            else if (reduction < 0) reductionText = `+${Math.abs(reduction)}% (惡化)`;
+            else reductionText = "0% (原始)";
+            optValueDisplay.innerText = reductionText;
+        }
+
+        // Render Summary Tab (Cpk Cards)
+        function renderSummaryTab() {
+            const container = document.getElementById('cpk-cards-container');
+            container.innerHTML = ''; // Clear existing
+
+            Object.keys(calculatedStats).forEach(pKey => {
+                const data = calculatedStats[pKey];
+                const cpkEval = getCpkLevel(data.cpk);
+                const cpkBarWidth = Math.min(100, Math.max(5, parseFloat(data.cpk) * 75)); // Normalize width
+
+                const cardHtml = `
+                    <div class="bg-white border border-slate-200 rounded-2xl p-5 hover:border-slate-300 transition-all shadow-sm hover:shadow-md group">
+                        <div class="flex justify-between items-center mb-4">
+                            <span class="text-base font-bold text-slate-900 font-mono">${data.name}</span>
+                            <span class="text-[10px] text-slate-500 bg-slate-100 px-2 py-1 rounded-full font-medium">幾何對應點</span>
+                        </div>
+                        <div class="space-y-4">
+                            <div>
+                                <div class="text-[10px] tracking-wider text-slate-500 uppercase font-mono mb-1 font-bold">製程能力指數 Cpk</div>
+                                <div class="flex items-baseline gap-2">
+                                    <span class="text-3xl font-black text-slate-900 font-mono">${data.cpk.toFixed(2)}</span>
+                                    <span class="text-xs px-2.5 py-1 rounded-full font-bold text-white ${cpkEval.bgClass} shadow-sm">
+                                        ${cpkEval.text}
+                                    </span>
+                                </div>
+                            </div>
+                            <!-- Cpk Progress Bar -->
+                            <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-100">
+                                <div class="h-full ${cpkEval.bgClass} transition-all duration-500" style="width: ${cpkBarWidth}%"></div>
+                            </div>
+                            <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                                <div class="bg-slate-50 p-2 rounded-xl border border-slate-100 group-hover:border-slate-200 transition-colors">
+                                    <span class="text-slate-500 block font-medium mb-1">Mean (平均值)</span>
+                                    <span class="text-slate-900 font-black">${data.mean.toFixed(3)} mm</span>
+                                </div>
+                                <div class="bg-slate-50 p-2 rounded-xl border border-slate-100 group-hover:border-slate-200 transition-colors">
+                                    <span class="text-slate-500 block font-medium mb-1">Sigma (標準差)</span>
+                                    <span class="text-slate-900 font-black">${data.stdDev.toFixed(4)}</span>
+                                </div>
+                                <div class="bg-slate-50 p-2 rounded-xl border border-slate-100 group-hover:border-slate-200 transition-colors">
+                                    <span class="text-slate-500 block font-medium mb-1">超出上限率OOS</span>
+                                    <span class="font-black ${data.oosCount > 0 ? 'text-rose-600' : 'text-emerald-600'}">${data.oosRate.toFixed(1)}%</span>
+                                </div>
+                                <div class="bg-slate-50 p-2 rounded-xl border border-slate-100 group-hover:border-slate-200 transition-colors">
+                                    <span class="text-slate-500 block font-medium mb-1">超標件數</span>
+                                    <span class="font-black ${data.oosCount > 0 ? 'text-rose-600' : 'text-slate-900'}">${data.oosCount} / 30</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', cardHtml);
+            });
+        }
+
+        // Render Run Chart Tab
+        function renderRunChart() {
+            const gridContainer = document.getElementById('chart-grid-container');
+            const dataContainer = document.getElementById('chart-data-container');
+            const uslLine = document.getElementById('chart-usl-line');
+            
+            // 1. Update Y-Axis Grid & Labels (Static scale 0.00 - 0.70 as per original design)
+            gridContainer.innerHTML = '';
+            const yLabels = [0.70, 0.60, 0.50, 0.40, 0.30, 0.20, 0.10, 0.00];
+            yLabels.forEach(v => {
+                gridContainer.innerHTML += `
+                    <div class="flex items-center w-full relative h-0">
+                        <span class="text-[10px] font-mono text-slate-400 w-8 shrink-0 -mt-1.5">${v.toFixed(2)}</span>
+                        <div class="w-full border-t border-slate-200/80 absolute left-10 right-0 top-0"></div>
+                    </div>
+                `;
+            });
+
+            // 2. Update USL Line Position
+            // Max Y is 0.70. Calculate percentage from bottom.
+            const uslBottomPct = Math.min(100, Math.max(0, (currentUsl / 0.70) * 100));
+            uslLine.style.bottom = `${uslBottomPct}%`;
+            
+            // 3. Render Data Points
+            dataContainer.innerHTML = '';
+            rawData.forEach((d, index) => {
+                 // Helper to calculate Y percentage
+                 const getYPct = (val) => `${Math.min(100, Math.max(0, (val / 0.70) * 100))}%`;
+
+                 let pointsHtml = '';
+                 // Conditionally render points based on selectedFilter
+                 if(selectedChartPoint === 'all' || selectedChartPoint === 'p1') {
+                     pointsHtml += `<div class="absolute w-1.5 h-1.5 -ml-[3px] -mb-[3px] rounded-full bg-cyan-400 transition-all ${d.p1 > currentUsl ? 'ring-4 ring-rose-200/80 bg-rose-500 z-10 w-2 h-2 -ml-[4px] -mb-[4px]' : ''}" style="bottom: ${getYPct(d.p1)}"></div>`;
+                 }
+                 if(selectedChartPoint === 'all' || selectedChartPoint === 'p2') {
+                     pointsHtml += `<div class="absolute w-1.5 h-1.5 -ml-[3px] -mb-[3px] rounded-full bg-indigo-400 transition-all ${d.p2 > currentUsl ? 'ring-4 ring-rose-200/80 bg-rose-500 z-10 w-2 h-2 -ml-[4px] -mb-[4px]' : ''}" style="bottom: ${getYPct(d.p2)}"></div>`;
+                 }
+                 if(selectedChartPoint === 'all' || selectedChartPoint === 'p3') {
+                     pointsHtml += `<div class="absolute w-1.5 h-1.5 -ml-[3px] -mb-[3px] rounded-full bg-amber-400 transition-all ${d.p3 > currentUsl ? 'ring-4 ring-rose-200/80 bg-rose-500 z-10 w-2 h-2 -ml-[4px] -mb-[4px]' : ''}" style="bottom: ${getYPct(d.p3)}"></div>`;
+                 }
+                 if(selectedChartPoint === 'all' || selectedChartPoint === 'p4') {
+                     pointsHtml += `<div class="absolute w-1.5 h-1.5 -ml-[3px] -mb-[3px] rounded-full bg-rose-400 transition-all ${d.p4 > currentUsl ? 'ring-4 ring-rose-200/80 bg-rose-500 z-10 w-2 h-2 -ml-[4px] -mb-[4px]' : ''}" style="bottom: ${getYPct(d.p4)}"></div>`;
+                 }
+
+                 const colHtml = `
+                    <div class="h-full flex flex-col justify-end items-center relative group" style="width: ${100/30}%">
+                        <!-- Hover Tooltip -->
+                         <div class="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 hidden group-hover:flex flex-col bg-slate-800 text-slate-100 p-2 rounded-lg shadow-xl z-30 w-36 font-mono text-[9px] pointer-events-none whitespace-nowrap">
+                            <div class="font-bold border-b border-slate-600 pb-1 mb-1 text-center text-amber-300">SN: ...${d.sn.slice(-4)}</div>
+                            <div class="flex justify-between"><span class="text-cyan-300">P1:</span> <span>${d.p1.toFixed(2)}</span></div>
+                            <div class="flex justify-between"><span class="text-indigo-300">P2:</span> <span>${d.p2.toFixed(2)}</span></div>
+                            <div class="flex justify-between"><span class="text-amber-300">P3:</span> <span>${d.p3.toFixed(2)}</span></div>
+                            <div class="flex justify-between"><span class="text-rose-300">P4:</span> <span>${d.p4.toFixed(2)}</span></div>
+                        </div>
+                        ${pointsHtml}
+                        <!-- X-Axis labels (only show some to prevent overcrowding) -->
+                        ${index % 5 === 0 ? `<span class="absolute top-full mt-2 text-[8px] font-mono text-slate-400">${d.id}</span>` : ''}
+                    </div>
+                 `;
+                 dataContainer.insertAdjacentHTML('beforeend', colHtml);
+            });
+
+            // Update Filter Button Styles
+            document.querySelectorAll('.chart-filter-btn').forEach(btn => {
+                if(btn.dataset.point === selectedChartPoint) {
+                    btn.className = 'chart-filter-btn px-3 py-1.5 text-xs rounded-lg transition-all font-mono font-bold uppercase bg-cyan-100 text-cyan-800 border border-cyan-200 shadow-sm';
+                } else {
+                    btn.className = 'chart-filter-btn px-3 py-1.5 text-xs rounded-lg transition-all font-mono font-bold uppercase text-slate-500 hover:bg-white border border-transparent hover:border-slate-200';
+                }
+            });
+        }
+
+
+        // Update HUD Function (Dynamic Data)
+        function updateHud(ptId) {
+            const data = calculatedStats[ptId];
+            if (!data) return;
+
+            const hudTitle = document.getElementById('hud-title');
+            const hudEmpty = document.getElementById('hud-empty');
+            const hudContent = document.getElementById('hud-content');
+            const hudAlertIcon = document.getElementById('hud-alert-icon');
+            const hudMean = document.getElementById('hud-mean');
+            const hudMax = document.getElementById('hud-max');
+            const hudStddev = document.getElementById('hud-stddev');
+            const hudCpk = document.getElementById('hud-cpk');
+            const hudEval = document.getElementById('hud-eval');
+            const hudCpkCard = document.getElementById('hud-cpk-card');
+
+            hudTitle.innerText = `${data.name} 數據分析`;
+            hudEmpty.classList.add('hidden');
+            hudContent.classList.remove('hidden');
+
+            const cpkEval = getCpkLevel(data.cpk);
+            const isCritical = data.cpk < 1.0 || data.max > currentUsl;
+
+            if (isCritical) {
+                hudAlertIcon.classList.remove('hidden');
+                hudTitle.classList.add('text-rose-600');
+            } else {
+                hudAlertIcon.classList.add('hidden');
+                hudTitle.classList.remove('text-rose-600');
+            }
+
+            hudMean.innerText = data.mean.toFixed(3);
+            hudMax.innerText = data.max.toFixed(2) + " mm";
+            hudMax.className = `text-sm font-black ${data.max > currentUsl ? 'text-rose-600' : 'text-slate-700'}`;
+            
+            hudStddev.innerText = data.stdDev.toFixed(4);
+
+            hudCpk.innerText = data.cpk.toFixed(2);
+            hudEval.innerText = cpkEval.text;
+            
+            // Dynamic styling for Cpk card based on level
+            hudCpkCard.className = `p-4 rounded-2xl border space-y-2 transition-colors shadow-sm ${cpkEval.bgClass.replace('bg-', 'bg-')}/10 ${cpkEval.borderClass}`;
+            hudCpk.className = `text-2xl font-black ${cpkEval.colorClass}`;
+            hudEval.className = `font-black ${cpkEval.colorClass}`;
+        }
+
+        function resetHud() {
+            document.getElementById('hud-title').innerText = "請在地圖上移動滑鼠";
+            document.getElementById('hud-title').classList.remove('text-rose-600');
+            document.getElementById('hud-empty').classList.remove('hidden');
+            document.getElementById('hud-content').classList.add('hidden');
+            document.getElementById('hud-alert-icon').classList.add('hidden');
+        }
+
+        // --- 4. MAIN RENDER & EVENT HANDLERS ---
+        function renderApp() {
+            calculateStats(); // Recalculate everything based on current state
+            updateMetricsUI();
+            if (activeTab === 'summary') renderSummaryTab();
+            if (activeTab === 'runchart') renderRunChart();
+            // Insights tab is static, no render function needed yet
+        }
+
+        // Event Listeners Setup
+        document.addEventListener('DOMContentLoaded', () => {
+            
+            // USL Input
+            const uslInput = document.getElementById('uslInput');
+            uslInput.addEventListener('change', (e) => {
+                currentUsl = parseFloat(e.target.value) || 0.60;
+                renderApp();
+            });
+
+            // Reset Button
+            document.getElementById('resetBtn').addEventListener('click', () => {
+                currentUsl = 0.60;
+                uslInput.value = "0.60";
+                optimizationMultiplier = 1.0;
+                document.getElementById('optSlider').value = "1.0";
+                renderApp();
+            });
+
+            // Optimization Slider
+            const optSlider = document.getElementById('optSlider');
+            optSlider.addEventListener('input', (e) => {
+                optimizationMultiplier = parseFloat(e.target.value);
+                renderApp();
+            });
+
+            // Tab Switching
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    activeTab = btn.dataset.tab;
+                    // Update Tab Styles
+                    document.querySelectorAll('.tab-btn').forEach(b => {
+                        if(b.dataset.tab === activeTab) {
+                            b.className = 'tab-btn px-4 py-2.5 rounded-xl font-bold text-sm transition-all bg-cyan-50 text-cyan-700 border border-cyan-200 shadow-sm';
+                        } else {
+                            b.className = 'tab-btn px-4 py-2.5 rounded-xl font-bold text-sm transition-all text-slate-500 hover:text-slate-900 hover:bg-slate-100 border border-transparent';
+                        }
+                    });
+                    // Show/Hide Content
+                    document.querySelectorAll('.tab-content').forEach(content => {
+                        if(content.id === `tab-content-${activeTab}`) {
+                            content.classList.remove('hidden');
+                        } else {
+                            content.classList.add('hidden');
+                        }
+                    });
+                    renderApp(); // Re-render active tab content
+                });
+            });
+
+             // Run Chart Filter Buttons
+             document.querySelectorAll('.chart-filter-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    selectedChartPoint = btn.dataset.point;
+                    renderRunChart();
+                });
+            });
+
+
+            // PCB Map Hover Listeners
+            const pinIds = ['p1', 'p2', 'p3', 'p4'];
+            pinIds.forEach(id => {
+                const pin = document.getElementById(`pin-${id}`);
+                pin.addEventListener('mouseenter', () => updateHud(id));
+                pin.addEventListener('mouseleave', resetHud);
+            });
+
+            // Initial Render
+            renderApp();
+        });
+
+    </script>
+</body>
+</html>
