@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>老賈 | 首席工程師戰術面板</title>
+  <!-- 載入 Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- 載入 Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  
+  <style>
+    /* 自訂捲軸 */
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: rgba(15, 23, 42, 0.5); }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(56, 189, 248, 0.2); border-radius: 4px; }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: rgba(56, 189, 248, 0.5); }
+    
+    /* 自訂滑動條 */
+    input[type=range] { -webkit-appearance: none; background: transparent; height: 4px; border-radius: 2px; }
+    input[type=range]:focus { outline: none; }
+    input[type=range]::-webkit-slider-runnable-track { width: 100%; height: 4px; cursor: pointer; background: #1e293b; border-radius: 2px; }
+    input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; height: 16px; width: 16px; border-radius: 50%; background: #06b6d4; cursor: pointer; margin-top: -6px; border: 2px solid #0f172a; position: relative; z-index: 30;}
+    
+    .slider-thumb-cyan::-webkit-slider-thumb { background: #06b6d4; }
+    .slider-thumb-red::-webkit-slider-thumb { background: #f43f5e; }
+    .transparent-track::-webkit-slider-runnable-track { background: transparent; }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-200 font-sans min-h-screen flex flex-col p-4 lg:p-6">
+
+  <!-- ================= 頂部導航與狀態列 ================= -->
+  <header class="flex flex-col lg:flex-row lg:items-end justify-between mb-6 pb-4 border-b border-slate-800 gap-4">
+    <div class="flex items-center gap-3">
+      <i data-lucide="cpu" class="text-cyan-400 w-10 h-10"></i>
+      <div>
+        <h1 class="text-2xl font-bold tracking-wider text-slate-100">
+          老賈 <span class="text-slate-500 font-light">| 1LB輪框胎匹配性ISSUE戰術面板</span>
+        </h1>
+        <div class="text-xs text-slate-400 mt-1 flex items-center gap-2 font-mono">
+          <i data-lucide="check-circle" class="w-3.5 h-3.5 text-emerald-400"></i> Vanilla JS / DSP Engines Online
+        </div>
+      </div>
+    </div>
+
+    <!-- 分頁切換器 -->
+    <div class="flex bg-slate-900 p-1 rounded-lg border border-slate-800">
+      <button onclick="switchTab('match')" id="btn-match" class="flex items-center gap-2 px-4 py-2 rounded-md text-sm transition-all duration-200 bg-slate-800 text-cyan-300 shadow-md border border-slate-700">
+        <i data-lucide="settings" class="w-4 h-4"></i> 胎框匹配分析
+      </button>
+      <button onclick="switchTab('acoustic')" id="btn-acoustic" class="flex items-center gap-2 px-4 py-2 rounded-md text-sm transition-all duration-200 text-slate-500 hover:text-slate-300 hover:bg-slate-800/50">
+        <i data-lucide="waves" class="w-4 h-4"></i> 聲紋時頻解析
+      </button>
+      <button onclick="switchTab('knowledge')" id="btn-knowledge" class="flex items-center gap-2 px-4 py-2 rounded-md text-sm transition-all duration-200 text-slate-500 hover:text-slate-300 hover:bg-slate-800/50">
+        <i data-lucide="book-open" class="w-4 h-4"></i> 量測與排除指南
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 relative">
+    
+    <!-- ================= 1. 胎框匹配工程分析工作站 ================= -->
+    <div id="tab-match" class="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full transition-opacity duration-300">
+      <!-- 左側：輸入區 -->
+      <div class="lg:col-span-5 space-y-6 flex flex-col h-full">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg">
+          <h2 class="text-lg font-semibold flex items-center gap-2 mb-4 text-cyan-400">
+            <i data-lucide="settings" class="w-5 h-5"></i> 系統邊界條件設定
+          </h2>
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">輪圈規格</label>
+              <select id="rim-select" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-cyan-500 text-sm">
+                <option value="MT2.15x10">MT2.15x10 (JATMA/CNS)</option>
+                <option value="MT2.15x12">MT2.15x12</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm text-slate-400 mb-1">輪胎規格</label>
+              <select class="w-full bg-slate-950 border border-slate-800 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-cyan-500 text-sm">
+                <option>90/90-10 (MAXXIS MA-EVF)</option>
+                <option>100/90-12</option>
+                <option>110/70-12</option>
+              </select>
+            </div>
+          </div>
+          <div id="rim-standards-info" class="mt-4 p-3 bg-slate-950 rounded-lg border border-slate-800 grid grid-cols-2 gap-x-4 gap-y-2">
+            <!-- 動態生成公差資訊 -->
+          </div>
+        </div>
+
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg flex-1 flex flex-col min-h-[400px]">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-md font-semibold flex items-center gap-2 text-cyan-400">
+              <i data-lucide="bar-chart-2" class="w-5 h-5"></i> 實測尺寸陣列 (N=30)
+            </h2>
+            <button onclick="generateMockData()" class="text-xs bg-cyan-900/40 hover:bg-cyan-900/60 text-cyan-300 px-3 py-1.5 rounded transition-colors border border-cyan-800">
+              載入實驗數據
+            </button>
+          </div>
+          <div class="overflow-y-auto flex-1 pr-2 custom-scrollbar">
+            <table class="w-full text-sm text-left">
+              <thead class="sticky top-0 bg-slate-900 z-10 text-slate-400 text-[11px] uppercase tracking-wider">
+                <tr>
+                  <th class="py-2 pl-2 w-10">ID</th>
+                  <th class="py-2">寬 A</th>
+                  <th class="py-2">座徑 D</th>
+                  <th class="py-2 text-cyan-400">Hump DH</th>
+                  <th class="py-2">高 G</th>
+                </tr>
+              </thead>
+              <tbody id="measurements-body" class="divide-y divide-slate-800/50">
+                <!-- 動態生成輸入列 -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右側：分析區 -->
+      <div class="lg:col-span-7 space-y-6 flex flex-col">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg flex-1">
+          <h2 class="text-xl font-semibold flex items-center gap-2 mb-6 border-b border-slate-800 pb-4 text-slate-100">
+            <i data-lucide="shield-alert" class="w-6 h-6 text-cyan-400"></i> 物理干涉與風險收斂模型
+          </h2>
+          
+          <div id="analysis-empty" class="flex flex-col items-center justify-center h-full min-h-[300px] text-slate-500">
+            <i data-lucide="info" class="w-8 h-8 mb-4 opacity-50"></i>
+            <p>等待數據輸入中...請於左側登錄三次元量測資料。</p>
+          </div>
+
+          <div id="analysis-content" class="hidden space-y-6">
+            <div class="grid grid-cols-2 lg:grid-cols-4 gap-4" id="stats-container">
+              <!-- 動態生成統計卡片 -->
+            </div>
+            <div class="space-y-4" id="risks-container">
+              <!-- 動態生成風險卡片 -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 2. 胎唇嵌合聲紋分析儀 ================= -->
+    <div id="tab-acoustic" class="hidden grid grid-cols-1 lg:grid-cols-12 gap-6 h-full transition-opacity duration-300">
+      
+      <!-- 左側：視覺化與播放 -->
+      <div class="lg:col-span-8 space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg flex flex-col relative overflow-hidden" style="height: 480px;">
+          
+          <!-- 上傳畫面 -->
+          <div id="upload-screen" class="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-slate-700 rounded-lg bg-slate-950/50 relative">
+            <i data-lucide="upload" class="w-10 h-10 text-slate-500 mb-3"></i>
+            <p class="text-sm text-slate-400">請載入充氣測試影片或音訊檔 (支援 MP4, MOV, MP3)</p>
+            <input type="file" id="audio-upload" accept="audio/*,video/*" class="mt-4 text-xs text-slate-400 file:mr-4 file:py-1.5 file:px-4 file:rounded-full file:border-0 file:bg-cyan-900 file:text-cyan-300 hover:file:bg-cyan-800 cursor-pointer relative z-10" />
+          </div>
+
+          <!-- 分析畫面 -->
+          <div id="analyzer-screen" class="hidden absolute inset-0 flex flex-col">
+            <video id="media-player" class="absolute inset-0 w-full h-full object-contain opacity-20 mix-blend-screen pointer-events-none"></video>
+            
+            <div class="relative z-10 flex flex-col h-full pointer-events-none gap-2 p-4">
+              <div class="flex justify-between items-center pointer-events-auto">
+                <span id="filter-status" class="text-xs font-mono text-cyan-400 bg-slate-950/80 px-2 py-1 rounded">
+                  Filter: BANDPASS @ 2500Hz
+                </span>
+                <button onclick="clearAudioFile()" class="flex items-center gap-1.5 bg-slate-800/90 hover:bg-slate-700 text-slate-300 px-3 py-1 rounded text-xs border border-slate-700 transition-colors shadow-lg">
+                  <i data-lucide="upload" class="w-3.5 h-3.5"></i> 載入新檔案
+                </button>
+              </div>
+              
+              <!-- 畫布與光標區 -->
+              <div id="canvas-container" class="relative flex-1 flex flex-col gap-2 rounded bg-slate-950/80 border border-slate-800 overflow-hidden cursor-crosshair pointer-events-auto">
+                
+                <div id="crosshair-x" class="hidden absolute top-0 bottom-0 w-px bg-cyan-400/80 z-30 pointer-events-none shadow-[0_0_8px_rgba(34,211,238,0.8)]"></div>
+                <div id="crosshair-tooltip" class="hidden absolute z-40 bg-slate-900 border border-cyan-500 text-cyan-300 text-[11px] font-mono px-2 py-1.5 rounded shadow-xl pointer-events-none transform -translate-x-1/2 -translate-y-full whitespace-nowrap"></div>
+                
+                <svg id="grid-overlay" class="absolute inset-0 w-full h-full pointer-events-none" style="z-index: 20;"></svg>
+
+                <div class="relative h-1/3 w-full border-b border-slate-800 pointer-events-none bg-slate-950">
+                  <div class="absolute top-1 left-2 text-[10px] text-slate-500 font-mono z-10">Spectrum (Instant)</div>
+                  <!-- 強制鎖定內部解析度，外觀交給 tailwind w-full h-full 縮放 -->
+                  <canvas id="canvas-bar" width="800" height="120" class="w-full h-full block"></canvas>
+                </div>
+                <div class="relative h-2/3 w-full pointer-events-none bg-slate-950">
+                  <div class="absolute top-1 left-2 text-[10px] text-slate-500 font-mono z-10 flex items-center gap-1">
+                    <i data-lucide="waves" class="w-3 h-3"></i> Spectrogram (Time-History)
+                  </div>
+                  <!-- 強制鎖定內部解析度 -->
+                  <canvas id="canvas-waterfall" width="800" height="240" class="w-full h-full block"></canvas>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 播放控制區 -->
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg">
+          <div class="flex items-center gap-4">
+            <button id="btn-play" onclick="togglePlay()" disabled class="w-10 h-10 rounded-full bg-cyan-900 text-cyan-300 flex items-center justify-center hover:bg-cyan-800 disabled:opacity-50 transition-colors shrink-0">
+              <i data-lucide="play" id="icon-play" class="w-5 h-5 ml-1"></i>
+            </button>
+            <div class="flex-1 min-w-0">
+              <div class="flex justify-between text-xs text-slate-400 font-mono mb-1">
+                <span id="time-current">0:00.00</span>
+                <span id="time-duration">0:00.00</span>
+              </div>
+              <div class="relative w-full h-6 flex items-center">
+                <div class="absolute w-full h-1.5 bg-slate-800 rounded"></div>
+                <div id="progress-bar" class="absolute h-1.5 bg-cyan-500 rounded pointer-events-none" style="width: 0%;"></div>
+                
+                <input type="range" id="range-start" min="0" max="100" value="0" class="absolute w-full transparent-track pointer-events-auto h-full z-20 slider-thumb-cyan" />
+                <input type="range" id="range-end" min="0" max="100" value="100" class="absolute w-full transparent-track pointer-events-auto h-full z-20 slider-thumb-red" />
+                
+                <div id="range-highlight" class="absolute h-1.5 bg-slate-500/50 pointer-events-none z-10" style="left: 0%; width: 100%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 右側：DSP 控制台 -->
+      <div class="lg:col-span-4 space-y-6">
+        <div class="bg-slate-900 border border-slate-800 rounded-xl p-5 shadow-lg h-full">
+          <h2 class="text-md font-semibold flex items-center gap-2 mb-4 text-slate-100 border-b border-slate-800 pb-3">
+            <i data-lucide="settings-2" class="w-4 h-4 text-cyan-400"></i> 物理聲學解析矩陣
+          </h2>
+          
+          <div class="mb-6">
+            <label class="flex items-center gap-2 text-xs text-slate-300 mb-2">
+              <i data-lucide="fast-forward" class="w-3.5 h-3.5 text-emerald-400"></i> 回放速度 (可變慢動作)
+            </label>
+            <div class="flex gap-2" id="rate-buttons">
+              <button onclick="setRate(0.25)" class="rate-btn flex-1 py-1 rounded text-xs font-mono border bg-slate-950 border-slate-800 text-slate-500" data-rate="0.25">0.25x</button>
+              <button onclick="setRate(0.5)" class="rate-btn flex-1 py-1 rounded text-xs font-mono border bg-slate-950 border-slate-800 text-slate-500" data-rate="0.5">0.5x</button>
+              <button onclick="setRate(1.0)" class="rate-btn flex-1 py-1 rounded text-xs font-mono border bg-emerald-900/50 border-emerald-500 text-emerald-300" data-rate="1">1.0x</button>
+              <button onclick="setRate(1.5)" class="rate-btn flex-1 py-1 rounded text-xs font-mono border bg-slate-950 border-slate-800 text-slate-500" data-rate="1.5">1.5x</button>
+            </div>
+          </div>
+
+          <div class="space-y-4">
+            <label class="flex items-center gap-2 text-xs text-slate-300">
+              <i data-lucide="activity" class="w-3.5 h-3.5 text-blue-400"></i> Biquad 濾波器設定
+            </label>
+            <div>
+              <span class="text-[10px] text-slate-400 mb-1 block">濾波模式</span>
+              <select id="filter-type" class="w-full bg-slate-950 border border-slate-800 rounded p-1.5 text-xs text-slate-200 focus:border-cyan-500 outline-none">
+                <option value="bandpass">帶通 (Bandpass) - 定位金屬撞擊區間</option>
+                <option value="highpass">高通 (Highpass) - 砍掉低頻噪音</option>
+                <option value="lowpass">低通 (Lowpass) - 濾除高頻雜訊</option>
+                <option value="allpass">全通 (Bypass) - 原始音訊</option>
+              </select>
+            </div>
+            
+            <div>
+              <div class="flex justify-between items-end mb-1">
+                <span class="text-[10px] text-slate-400">中心頻率 (Hz)</span>
+                <input type="number" id="filter-freq-num" min="20" max="20000" step="10" value="2500" class="w-20 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-right text-xs font-mono text-cyan-400 outline-none" />
+              </div>
+              <input type="range" id="filter-freq-range" min="20" max="20000" step="10" value="2500" class="w-full" />
+            </div>
+
+            <div id="q-factor-container">
+              <div class="flex justify-between items-end mb-1">
+                <span class="text-[10px] text-slate-400">共振峰值 (Q Factor)</span>
+                <input type="number" id="filter-q-num" min="0.1" max="50" step="0.1" value="1.5" class="w-20 bg-slate-950 border border-slate-800 rounded px-1 py-0.5 text-right text-xs font-mono text-cyan-400 outline-none" />
+              </div>
+              <input type="range" id="filter-q-range" min="0.1" max="10" step="0.1" value="1.5" class="w-full" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 3. 知識庫與疑難雜症排除指南 ================= -->
+    <div id="tab-knowledge" class="hidden grid grid-cols-1 lg:grid-cols-2 gap-6 h-full transition-opacity duration-300">
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg overflow-y-auto custom-scrollbar" style="max-height: calc(100vh - 120px);">
+        <h2 class="text-xl font-semibold flex items-center gap-2 mb-6 text-slate-100 border-b border-slate-800 pb-4">
+          <i data-lucide="ruler" class="w-6 h-6 text-cyan-400"></i> 業界標準量測武裝與手法
+        </h2>
+        <div class="space-y-6 text-sm text-slate-300">
+          <div class="bg-slate-950/50 p-4 rounded-lg border border-slate-800/60">
+            <h3 class="text-md font-bold text-emerald-400 mb-3 flex items-center gap-2">
+              <i data-lucide="server" class="w-4 h-4"></i> 胎唇座直徑 (D) & Hump 直徑 (DH) —— 決定氣密與滑差的生死線
+            </h3>
+            <div class="space-y-4 pl-2">
+              <div>
+                <strong class="text-slate-200 block mb-1">研發 / 首件承認 (FAI)：</strong>
+                <p>唯一真理是 <strong class="text-cyan-300">CMM (三次元量測儀)</strong>。探針會在這兩個階級面上打出至少 8 到 16 個點來建構圓，藉此算出精確的直徑與真圓度。由於帶有推拔角，人為手動量測極易產生阿貝誤差。</p>
+              </div>
+              <div>
+                <strong class="text-slate-200 block mb-1">產線 / OQC 抽檢：</strong>
+                <ul class="list-disc pl-5 space-y-2">
+                  <li><span class="text-amber-300">針對 D 值：</span>標準武器是 <strong>π 尺 (Pi Tape / 圓周尺)</strong>。將鋼帶繞胎唇座一圈，尺面刻度已預先除以 π，讀出數字即為直徑。</li>
+                  <li><span class="text-amber-300">針對 DH 值：</span>Hump 是微小輪廓，π 尺易滑。業界通常使用 <strong>GO/NO-GO 專用環規 (Ring Gauge)</strong> 做快速篩選；或使用特製卡尺/雷射外徑測量儀。</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          <div class="bg-slate-950/50 p-4 rounded-lg border border-slate-800/60">
+            <h3 class="text-md font-bold text-emerald-400 mb-3 flex items-center gap-2">
+              <i data-lucide="microscope" class="w-4 h-4"></i> 輪圈寬度 (A) & 凸緣高度 (G) —— 決定輪胎 Profile 的外衣
+            </h3>
+            <div class="space-y-4 pl-2">
+              <div>
+                <strong class="text-slate-200 block mb-1">研發 / 首件承認 (FAI)：</strong>
+                <p>使用 <strong class="text-cyan-300">2D 輪廓儀 (Profilometer)</strong>。掃描所有微小圓角，直接跟 CAD 進行疊圖 (Overlay) 比對，確保鑄造模具無嚴重磨損。</p>
+              </div>
+              <div>
+                <strong class="text-slate-200 block mb-1">產線 / OQC 抽檢：</strong>
+                <ul class="list-disc pl-5 space-y-2">
+                  <li><span class="text-amber-300">A 值 (寬度)：</span>使用大尺寸游標卡尺 (Caliper)，直接量測兩邊凸緣內側的水平距離。</li>
+                  <li><span class="text-amber-300">G 值 (高度)：</span>使用深度規 (Depth Gauge)。以胎唇座為基準面 0，測量台階到凸緣頂點的垂直高度。</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-6 shadow-lg overflow-y-auto custom-scrollbar" style="max-height: calc(100vh - 120px);">
+        <h2 class="text-xl font-semibold flex items-center gap-2 mb-6 text-slate-100 border-b border-slate-800 pb-4">
+          <i data-lucide="wrench" class="w-6 h-6 text-orange-400"></i> 產線疑難雜症排除指南 (Troubleshooting)
+        </h2>
+        <div class="space-y-6 text-sm text-slate-300">
+          <div class="bg-orange-950/20 p-4 rounded-lg border border-orange-900/40">
+            <h3 class="text-md font-bold text-orange-400 mb-2">現象：充氣機無法將胎唇打到位 (Missing Bead Pop)</h3>
+            <p class="mb-4">如聲紋儀所見，若只聽到嘶嘶聲卻缺乏清脆「砰/啪」聲，表示遇到強大物理阻力。請依序排除：</p>
+            <div class="space-y-4">
+              <div class="bg-slate-950/60 p-3 rounded border border-slate-800">
+                <strong class="text-cyan-300 block mb-1">Step 1: 確認潤滑工藝 (Lubrication Check)</strong>
+                <p>前往產線檢視。上胎前胎唇潤滑膏 (Bead paste) 塗抹是否均勻充分？這是最快解法。</p>
+              </div>
+              <div class="bg-slate-950/60 p-3 rounded border border-slate-800">
+                <strong class="text-cyan-300 block mb-1">Step 2: 調高充氣壓 (Burst Pressure Tuning)</strong>
+                <p>確認機台充氣設定值。針對高剛性胎唇，可能需將充氣壓力逼近規範上限 ( > 500kPa ) 方能越過 Hump。</p>
+              </div>
+              <div class="bg-slate-950/60 p-3 rounded border border-slate-800">
+                <strong class="text-cyan-300 block mb-1">Step 3: FAI 重新量測公差疊加 (Tolerance Verification)</strong>
+                <p>將退下來的異常框送入實驗室，以 CMM 量測此框 DH 是否逼近/超過 USL。若 OQC 報告變異數極小，通常是未落實全檢，需退回要求重測。</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ================= JavaScript 邏輯區 ================= -->
+  <script>
+    // 渲染 Lucide Icons
+    lucide.createIcons();
+
+    // ==========================================
+    // Tabs 切換邏輯
+    // ==========================================
+    const tabs = ['match', 'acoustic', 'knowledge'];
+    function switchTab(tabId) {
+      tabs.forEach(t => {
+        document.getElementById(`tab-${t}`).classList.add('hidden');
+        const btn = document.getElementById(`btn-${t}`);
+        btn.className = "flex items-center gap-2 px-4 py-2 rounded-md text-sm transition-all duration-200 text-slate-500 hover:text-slate-300 hover:bg-slate-800/50";
+      });
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      const activeBtn = document.getElementById(`btn-${tabId}`);
+      activeBtn.className = "flex items-center gap-2 px-4 py-2 rounded-md text-sm transition-all duration-200 bg-slate-800 text-cyan-300 shadow-md border border-slate-700";
+    }
+
+    // ==========================================
+    // 胎框匹配分析 (Match Analyzer) 邏輯
+    // ==========================================
+    const RIM_STANDARDS = {
+      'MT2.15x10': { 
+        A: { target: 55.0, tolPlus: 1.0, tolMinus: 0.5, name: '輪圈寬度 (A)' },
+        D: { target: 253.20, tolPlus: 0.46, tolMinus: 0.18, name: '胎唇座直徑 (D)' },
+        DH: { target: 252.52, tolPlus: 0.63, tolMinus: 0.32, name: 'Hump直徑 (DH)' },
+        G: { target: 11.0, tolPlus: 1.0, tolMinus: 0.5, name: '凸緣高度 (G)' }
+      },
+      'MT2.15x12': { 
+        A: { target: 55.0, tolPlus: 1.0, tolMinus: 0.5, name: '輪圈寬度 (A)' },
+        D: { target: 304.0, tolPlus: 1.2, tolMinus: 1.2, name: '胎唇座直徑 (D)' },
+        DH: { target: 303.2, tolPlus: 0.8, tolMinus: 0.8, name: 'Hump直徑 (DH)' },
+        G: { target: 13.0, tolPlus: 1.0, tolMinus: 0.5, name: '凸緣高度 (G)' }
+      }
+    };
+
+    let measurements = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, A: '', D: '', DH: '', G: '' }));
+    
+    function initMatchTable() {
+      const tbody = document.getElementById('measurements-body');
+      tbody.innerHTML = '';
+      measurements.forEach(row => {
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-800/30";
+        let html = `<td class="py-1 pl-2 text-slate-500 text-xs font-mono">${row.id.toString().padStart(2, '0')}</td>`;
+        ['A', 'D', 'DH', 'G'].forEach(field => {
+          const isDH = field === 'DH';
+          const borderClass = isDH ? 'border-cyan-900/50 focus:border-cyan-500' : 'border-slate-800 focus:border-cyan-500';
+          // 確保數值非 NaN
+          const val = isNaN(row[field]) ? '' : row[field];
+          html += `
+            <td class="py-1 pr-1">
+              <input type="number" step="0.01" value="${val}" 
+                     oninput="updateMeasurement(${row.id}, '${field}', this.value)"
+                     class="w-full bg-slate-950 border rounded px-1.5 py-1 text-slate-300 focus:outline-none font-mono text-xs ${borderClass}" 
+                     placeholder="-">
+            </td>`;
+        });
+        tr.innerHTML = html;
+        tbody.appendChild(tr);
+      });
+      updateRimInfo();
+    }
+
+    function updateMeasurement(id, field, value) {
+      const index = measurements.findIndex(m => m.id === id);
+      if (index !== -1) {
+        measurements[index][field] = value;
+        analyzeMatch();
+      }
+    }
+
+    function generateMockData() {
+      const rim = document.getElementById('rim-select').value;
+      const std = RIM_STANDARDS[rim];
+      measurements = Array.from({ length: 30 }, (_, i) => {
+        return {
+          id: i + 1,
+          A: (std.A.target + (Math.random() - 0.4) * 2).toFixed(2),
+          D: (std.D.target + (Math.random() - 0.5) * 1.0).toFixed(2),
+          DH: (std.DH.target + (Math.random() - 0.3) * 1.2).toFixed(2),
+          G: (std.G.target + (Math.random() - 0.5) * 1.5).toFixed(2)
+        };
+      });
+      initMatchTable();
+      analyzeMatch();
+    }
+
+    document.getElementById('rim-select').addEventListener('change', () => {
+      measurements = Array.from({ length: 30 }, (_, i) => ({ id: i + 1, A: '', D: '', DH: '', G: '' }));
+      initMatchTable();
+      analyzeMatch();
+    });
+
+    function updateRimInfo() {
+      const rim = document.getElementById('rim-select').value;
+      const std = RIM_STANDARDS[rim];
+      const container = document.getElementById('rim-standards-info');
+      let html = `<div class="col-span-2 text-xs text-slate-500 font-mono mb-1">標稱尺寸 & 公差 (mm)</div>`;
+      for (const [key, val] of Object.entries(std)) {
+        html += `
+          <div class="flex justify-between text-xs py-1 border-b border-slate-800/50">
+            <span class="text-slate-400">${key}</span>
+            <span class="font-mono text-emerald-400">${val.target.toFixed(2)} <span class="text-slate-500 text-[10px]">(+${val.tolPlus}/-${val.tolMinus})</span></span>
+          </div>`;
+      }
+      container.innerHTML = html;
+    }
+
+    function analyzeMatch() {
+      const rim = document.getElementById('rim-select').value;
+      const std = RIM_STANDARDS[rim];
+      const validData = measurements.filter(m => m.A !== '' && m.D !== '' && m.DH !== '' && m.G !== '' && !isNaN(m.A) && !isNaN(m.D) && !isNaN(m.DH) && !isNaN(m.G));
+      
+      const emptyDiv = document.getElementById('analysis-empty');
+      const contentDiv = document.getElementById('analysis-content');
+      
+      if (validData.length === 0) {
+        emptyDiv.classList.remove('hidden');
+        contentDiv.classList.add('hidden');
+        return;
+      }
+      emptyDiv.classList.add('hidden');
+      contentDiv.classList.remove('hidden');
+
+      const stats = {};
+      ['A', 'D', 'DH', 'G'].forEach(key => {
+        const values = validData.map(m => parseFloat(m[key]));
+        const max = Math.max(...values);
+        const min = Math.min(...values);
+        const avg = (values.reduce((a,b)=>a+b,0) / values.length).toFixed(2);
+        const outHigh = values.filter(v => v > std[key].target + std[key].tolPlus).length;
+        const outLow = values.filter(v => v < std[key].target - std[key].tolMinus).length;
+        stats[key] = { max, min, avg, outHigh, outLow };
+      });
+
+      // 渲染統計卡片
+      const statsContainer = document.getElementById('stats-container');
+      statsContainer.innerHTML = '';
+      ['A', 'D', 'DH', 'G'].forEach(key => {
+        const s = stats[key];
+        const outTotal = s.outHigh + s.outLow;
+        const isDanger = outTotal > 0;
+        const bgClass = isDanger ? 'bg-red-950/20 border-red-900/50' : 'bg-emerald-950/20 border-emerald-900/30';
+        const titleClass = key === 'DH' ? 'text-cyan-400 font-bold' : 'text-slate-400';
+        
+        statsContainer.innerHTML += `
+          <div class="p-3 rounded-lg border ${bgClass}">
+            <div class="text-sm mb-1 ${titleClass}">${std[key].name}</div>
+            <div class="text-xl font-mono mb-2 flex items-baseline gap-1">${s.avg} <span class="text-[10px] text-slate-500 font-sans">Avg</span></div>
+            <div class="text-[11px] text-slate-400 space-y-1 font-mono">
+              <div class="flex justify-between"><span>Max:</span> <span class="${s.max > std[key].target + std[key].tolPlus ? 'text-red-400' : ''}">${s.max.toFixed(2)}</span></div>
+              <div class="flex justify-between"><span>Min:</span> <span class="${s.min < std[key].target - std[key].tolMinus ? 'text-red-400' : ''}">${s.min.toFixed(2)}</span></div>
+              <div class="flex justify-between pt-1 mt-1 border-t border-slate-800/50">
+                <span>OOS 異常:</span> <span class="${outTotal > 0 ? 'text-red-400 font-bold' : 'text-emerald-400'}">${outTotal} ea</span>
+              </div>
+            </div>
+          </div>
+        `;
+      });
+
+      // 計算風險
+      const risks = { assembly: [], maintenance: [], consumer: [] };
+      if (stats.DH.outHigh > 0 || stats.D.outHigh > 0) {
+        risks.assembly.push({ level: 'Critical', msg: `偵測到 DH/D 偏大。產線充氣 (Seating) 時需極高壓力才能跨越 Hump。若搭配 TPMS 將嚴重干涉。` });
+        risks.maintenance.push({ level: 'High', msg: `售後維修退胎時，Hump 徑過大會迫使技師施加超額下壓力，增加破壞輪框風險。` });
+      }
+      if (stats.DH.outLow > 0 || stats.D.outLow > 0) {
+        risks.consumer.push({ level: 'Critical', msg: `偵測到 DH/D 偏小。物理拘束力不足，起步大扭矩易造成滑差，遇側向衝擊易引發瞬間洩氣。` });
+      }
+      if (stats.A.outHigh > 0 || stats.A.outLow > 0) {
+        risks.consumer.push({ level: 'Low', msg: `輪圈寬度(A)超出公差。影響車輛傾倒動態線性度。` });
+      }
+      if (stats.G.outHigh > 0) {
+        risks.assembly.push({ level: 'Medium', msg: `凸緣高度(G)偏大。入胎壓盤路徑可能與凸緣干涉。` });
+        risks.consumer.push({ level: 'Medium', msg: `G 值過高壓縮輪胎受衝擊時形變裕度，增加蛇咬 (Pinch Flat) 機率。` });
+      }
+
+      // 渲染風險
+      const risksContainer = document.getElementById('risks-container');
+      
+      const renderRiskGroup = (title, iconName, riskArray, colorClass) => {
+        let content = riskArray.length === 0 
+          ? `<p class="text-slate-500 text-xs pl-6">無明顯風險偵測。</p>`
+          : `<ul class="space-y-2 pl-6">${riskArray.map(r => {
+              let labelColor = "bg-blue-900/30 text-blue-400 border-blue-800";
+              if (r.level === 'Critical') labelColor = "bg-red-900/30 text-red-400 border-red-800";
+              if (r.level === 'High') labelColor = "bg-orange-900/30 text-orange-400 border-orange-800";
+              if (r.level === 'Medium') labelColor = "bg-amber-900/30 text-amber-400 border-amber-800";
+              return `
+                <li class="flex flex-col gap-1">
+                  <span class="w-fit text-[10px] uppercase font-bold tracking-wider px-1.5 py-0.5 rounded border ${labelColor}">${r.level}</span>
+                  <p class="text-xs text-slate-300 leading-relaxed">${r.msg}</p>
+                </li>`;
+            }).join('')}</ul>`;
+            
+        return `
+          <div class="bg-slate-950/40 p-3 rounded-lg border border-slate-800/60">
+            <h3 class="text-sm font-semibold text-slate-200 flex items-center gap-2 mb-2">
+              <i data-lucide="${iconName}" class="w-4 h-4 ${colorClass}"></i> ${title}
+            </h3>
+            ${content}
+          </div>`;
+      };
+
+      risksContainer.innerHTML = 
+        renderRiskGroup("1. 生產線與打氣工藝 (Assembly)", "settings", risks.assembly, "text-amber-400") +
+        renderRiskGroup("2. 售後服務與保修 (Maintenance)", "wrench", risks.maintenance, "text-blue-400") +
+        renderRiskGroup("3. 終端消費者安全 (Safety)", "alert-triangle", risks.consumer, "text-red-500");
+      
+      lucide.createIcons();
+    }
+
+    // 初始化 Match 表格
+    initMatchTable();
+
+    // ==========================================
+    // 聲紋時頻分析儀 (Acoustic Analyzer) 邏輯
+    // ==========================================
+    let audioCtx, source, filter, analyser, animationId;
+    let isPlaying = false;
+    let mediaDuration = 0;
+    let mediaSampleRate = 48000;
+    const MAX_DISPLAY_FREQ = 20000;
+    
+    let timeRange = { start: 0, end: 100 };
+    let latestData = new Uint8Array(1024);
+
+    // DOM Elements
+    const fileInput = document.getElementById('audio-upload');
+    const mediaPlayer = document.getElementById('media-player');
+    const uploadScreen = document.getElementById('upload-screen');
+    const analyzerScreen = document.getElementById('analyzer-screen');
+    const btnPlay = document.getElementById('btn-play');
+    const iconPlay = document.getElementById('icon-play');
+    const timeCurrent = document.getElementById('time-current');
+    const timeDuration = document.getElementById('time-duration');
+    const progressBar = document.getElementById('progress-bar');
+    const rangeStart = document.getElementById('range-start');
+    const rangeEnd = document.getElementById('range-end');
+    const rangeHighlight = document.getElementById('range-highlight');
+    
+    const filterType = document.getElementById('filter-type');
+    const filterFreqNum = document.getElementById('filter-freq-num');
+    const filterFreqRange = document.getElementById('filter-freq-range');
+    const filterQNum = document.getElementById('filter-q-num');
+    const filterQRange = document.getElementById('filter-q-range');
+    const qContainer = document.getElementById('q-factor-container');
+    const filterStatus = document.getElementById('filter-status');
+
+    // File Upload
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      const url = URL.createObjectURL(file);
+      
+      mediaPlayer.src = url;
+      uploadScreen.classList.add('hidden');
+      analyzerScreen.classList.remove('hidden');
+      btnPlay.disabled = false;
+      
+      // Reset state
+      if(isPlaying) togglePlay();
+      timeRange = { start: 0, end: 100 };
+      rangeStart.value = 0;
+      rangeEnd.value = 100;
+      updateRangeHighlight();
+      
+      // Draw Grid
+      drawGrid();
+    });
+
+    function clearAudioFile() {
+      if (isPlaying) togglePlay();
+      mediaPlayer.src = "";
+      fileInput.value = "";
+      uploadScreen.classList.remove('hidden');
+      analyzerScreen.classList.add('hidden');
+      btnPlay.disabled = true;
+    }
+
+    // Audio Setup
+    function initAudio() {
+      if (audioCtx) return;
+      
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      mediaSampleRate = audioCtx.sampleRate;
+      
+      source = audioCtx.createMediaElementSource(mediaPlayer);
+      filter = audioCtx.createBiquadFilter();
+      analyser = audioCtx.createAnalyser();
+      
+      analyser.fftSize = 2048;
+      analyser.smoothingTimeConstant = 0.5;
+      latestData = new Uint8Array(analyser.frequencyBinCount);
+      
+      source.connect(filter);
+      filter.connect(analyser);
+      analyser.connect(audioCtx.destination);
+      
+      updateFilter();
+    }
+
+    // Playback controls
+    function togglePlay() {
+      initAudio();
+      
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+
+      if (isPlaying) {
+        mediaPlayer.pause();
+        isPlaying = false;
+        cancelAnimationFrame(animationId);
+        iconPlay.setAttribute('data-lucide', 'play');
+      } else {
+        const startSec = (timeRange.start / 100) * mediaDuration;
+        const endSec = (timeRange.end / 100) * mediaDuration;
+        
+        if (mediaPlayer.currentTime < startSec || mediaPlayer.currentTime >= endSec) {
+          mediaPlayer.currentTime = startSec;
+        }
+        
+        // 先將狀態改為 true，確保 renderFrame 啟動時能順利通過 guard 條件
+        isPlaying = true;
+        mediaPlayer.play().catch(e => {
+          console.error("Playback failed:", e);
+          isPlaying = false;
+          iconPlay.setAttribute('data-lucide', 'play');
+          lucide.createIcons();
+        });
+        
+        iconPlay.setAttribute('data-lucide', 'pause');
+        drawVisualizer();
+      }
+      lucide.createIcons();
+    }
+
+    // Format Time
+    function formatTime(time) {
+      if (isNaN(time) || !isFinite(time)) return "0:00.00";
+      const mins = Math.floor(time / 60);
+      const secs = Math.floor(time % 60);
+      const ms = Math.floor((time % 1) * 100);
+      return `${mins}:${secs.toString().padStart(2, '0')}.${ms.toString().padStart(2, '0')}`;
+    }
+
+    mediaPlayer.addEventListener('loadedmetadata', () => {
+      mediaDuration = mediaPlayer.duration;
+      timeDuration.innerText = formatTime(mediaDuration);
+    });
+
+    mediaPlayer.addEventListener('timeupdate', () => {
+      const current = mediaPlayer.currentTime;
+      timeCurrent.innerText = formatTime(current);
+      
+      if (mediaDuration > 0) {
+        progressBar.style.width = `${(current / mediaDuration) * 100}%`;
+      }
+
+      const endSec = (timeRange.end / 100) * mediaDuration;
+      if (current >= endSec && isPlaying) {
+        togglePlay(); // Pause
+      }
+    });
+
+    mediaPlayer.addEventListener('ended', () => {
+      if(isPlaying) togglePlay();
+    });
+
+    // Time Range Sliders
+    function updateRangeHighlight() {
+      rangeHighlight.style.left = `${timeRange.start}%`;
+      rangeHighlight.style.width = `${timeRange.end - timeRange.start}%`;
+    }
+    
+    rangeStart.addEventListener('input', (e) => {
+      let val = Number(e.target.value);
+      if (val >= timeRange.end) {
+        val = timeRange.end - 1;
+        e.target.value = val;
+      }
+      timeRange.start = val;
+      updateRangeHighlight();
+    });
+
+    rangeEnd.addEventListener('input', (e) => {
+      let val = Number(e.target.value);
+      if (val <= timeRange.start) {
+        val = timeRange.start + 1;
+        e.target.value = val;
+      }
+      timeRange.end = val;
+      updateRangeHighlight();
+    });
+
+    // Speed Control
+    function setRate(rate) {
+      mediaPlayer.playbackRate = rate;
+      document.querySelectorAll('.rate-btn').forEach(btn => {
+        if(parseFloat(btn.getAttribute('data-rate')) === rate) {
+          btn.className = "rate-btn flex-1 py-1 rounded text-xs font-mono border bg-emerald-900/50 border-emerald-500 text-emerald-300";
+        } else {
+          btn.className = "rate-btn flex-1 py-1 rounded text-xs font-mono border bg-slate-950 border-slate-800 text-slate-500 hover:border-slate-600";
+        }
+      });
+    }
+
+    // Filter Controls
+    function updateFilter() {
+      if (!filter || !audioCtx) return;
+      const type = filterType.value;
+      const freq = Number(filterFreqNum.value);
+      const q = Number(filterQNum.value);
+
+      filter.type = type;
+      filter.frequency.setTargetAtTime(freq, audioCtx.currentTime, 0.1);
+      
+      if (type !== 'lowpass' && type !== 'highpass' && type !== 'allpass') {
+        qContainer.classList.remove('hidden');
+        filter.Q.setTargetAtTime(q, audioCtx.currentTime, 0.1);
+      } else {
+        qContainer.classList.add('hidden');
+      }
+      
+      filterStatus.innerText = `Filter: ${type.toUpperCase()} @ ${freq}Hz`;
+    }
+
+    // Sync Sliders and Number Inputs
+    filterType.addEventListener('change', updateFilter);
+    
+    filterFreqNum.addEventListener('input', (e) => {
+      filterFreqRange.value = e.target.value;
+      updateFilter();
+    });
+    filterFreqRange.addEventListener('input', (e) => {
+      filterFreqNum.value = e.target.value;
+      updateFilter();
+    });
+    
+    filterQNum.addEventListener('input', (e) => {
+      filterQRange.value = e.target.value;
+      updateFilter();
+    });
+    filterQRange.addEventListener('input', (e) => {
+      filterQNum.value = e.target.value;
+      updateFilter();
+    });
+
+    // Draw Grid (SVG)
+    function drawGrid() {
+      const svg = document.getElementById('grid-overlay');
+      const freqs = [100, 500, 1000, 2500, 5000, 10000, 15000, 20000];
+      let html = '';
+      freqs.forEach(f => {
+        if (f <= MAX_DISPLAY_FREQ) {
+          const left = (f / MAX_DISPLAY_FREQ) * 100;
+          const label = f >= 1000 ? `${f/1000}k` : f;
+          html += `
+            <g>
+              <line x1="${left}%" y1="0" x2="${left}%" y2="100%" stroke="rgba(255, 255, 255, 0.15)" stroke-dasharray="4 4" stroke-width="1"></line>
+              <text x="${left}%" y="98%" fill="rgba(255, 255, 255, 0.5)" font-size="10" font-family="monospace" text-anchor="middle" class="select-none drop-shadow-md">${label}Hz</text>
+            </g>
+          `;
+        }
+      });
+      svg.innerHTML = html;
+    }
+
+    // Visualization Loop
+    function drawVisualizer() {
+      // 啟動新一輪繪圖前，確實殺掉前一次的 RequestAnimationFrame 確保不重疊
+      if (animationId) {
+        cancelAnimationFrame(animationId);
+      }
+      
+      const cBar = document.getElementById('canvas-bar');
+      const ctxBar = cBar.getContext('2d');
+      const cWater = document.getElementById('canvas-waterfall');
+      const ctxWater = cWater.getContext('2d', { willReadFrequently: true });
+      
+      const width = cBar.width;
+      const height = cBar.height;
+      const wWidth = cWater.width;
+      const wHeight = cWater.height;
+
+      const nyquist = mediaSampleRate / 2;
+      const bufferLength = analyser.frequencyBinCount;
+      const maxBinToDraw = Math.floor((MAX_DISPLAY_FREQ / nyquist) * bufferLength);
+      const actualBins = Math.min(maxBinToDraw, bufferLength);
+      
+      const dataArray = new Uint8Array(bufferLength);
+
+      function renderFrame() {
+        if (!isPlaying) return;
+        animationId = requestAnimationFrame(renderFrame);
+        
+        analyser.getByteFrequencyData(dataArray);
+        latestData.set(dataArray);
+
+        // -- Bar Chart --
+        ctxBar.fillStyle = 'rgb(15, 23, 42)';
+        ctxBar.fillRect(0, 0, width, height);
+        
+        const barWidth = width / actualBins;
+        for (let i = 0; i < actualBins; i++) {
+          const v = dataArray[i];
+          const barHeight = (v / 255) * height;
+          const r = Math.min(255, v + (25 * (i/actualBins)));
+          const g = Math.min(255, 250 * (i/actualBins));
+          ctxBar.fillStyle = `rgb(${r},${g},250)`;
+          ctxBar.fillRect(i * barWidth, height - barHeight, Math.ceil(barWidth), barHeight);
+        }
+
+        // -- Spectrogram (Waterfall) --
+        ctxWater.drawImage(cWater, 0, 0, wWidth, wHeight - 1, 0, 1, wWidth, wHeight - 1);
+        const specBinWidth = wWidth / actualBins;
+        for (let i = 0; i < actualBins; i++) {
+          const v = dataArray[i];
+          ctxWater.fillStyle = `hsl(${240 - (v/255)*240}, 100%, ${v === 0 ? 0 : 15 + (v/255)*40}%)`;
+          ctxWater.fillRect(i * specBinWidth, 0, Math.ceil(specBinWidth), 1);
+        }
+      }
+      renderFrame();
+    }
+
+    // Mouse Tracking (Crosshair)
+    const cvsContainer = document.getElementById('canvas-container');
+    const chX = document.getElementById('crosshair-x');
+    const chTooltip = document.getElementById('crosshair-tooltip');
+
+    cvsContainer.addEventListener('mousemove', (e) => {
+      if(!audioCtx || uploadScreen.classList.contains('hidden') === false) return;
+      
+      const rect = cvsContainer.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      const safeWidth = rect.width || 1;
+      
+      const freq = Math.max(0, Math.round((x / safeWidth) * MAX_DISPLAY_FREQ)) || 0;
+      
+      const nyquist = mediaSampleRate / 2;
+      const bufferLength = analyser ? analyser.frequencyBinCount : 1024;
+      const binIndex = Math.floor((freq / nyquist) * bufferLength) || 0;
+      
+      let amp = 0;
+      if (binIndex >= 0 && binIndex < latestData.length) {
+        amp = Math.round((latestData[binIndex] / 255) * 100) || 0;
+      }
+
+      chX.classList.remove('hidden');
+      chTooltip.classList.remove('hidden');
+      
+      chX.style.left = `${x}px`;
+      
+      const toolX = Math.max(Math.min(x, safeWidth - 50), 50);
+      const toolY = Math.max(y - 12, 40);
+      
+      chTooltip.style.left = `${toolX}px`;
+      chTooltip.style.top = `${toolY}px`;
+      
+      chTooltip.innerHTML = `<span>Freq: <strong class="text-white">${freq}</strong> Hz | Amp: <strong class="text-white">${amp}</strong>%</span>`;
+    });
+
+    cvsContainer.addEventListener('mouseleave', () => {
+      chX.classList.add('hidden');
+      chTooltip.classList.add('hidden');
+    });
+
+  </script>
+</body>
+</html>
