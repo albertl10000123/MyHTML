@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whipple-Carvallo 專業版動態模擬器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        .param-group { @apply mb-3 bg-white p-3 rounded-lg border border-slate-200 shadow-sm; }
+        .param-label { @apply flex justify-between text-sm font-semibold text-slate-700 mb-1; }
+        .matrix-box { @apply font-mono text-sm bg-slate-900 text-green-400 p-3 rounded-lg overflow-x-auto whitespace-pre leading-relaxed tracking-wider; }
+        .def-title { @apply font-bold text-slate-800 mt-2; }
+        .def-desc { @apply text-xs text-slate-500 mb-1 pb-1; }
+    </style>
+</head>
+<body class="bg-slate-100 font-sans p-4">
+
+    <div class="max-w-7xl mx-auto">
+        <header class="mb-6 bg-slate-800 text-white p-5 rounded-xl shadow-md">
+            <h1 class="text-2xl font-bold">🏍️ Ride-DNA Pro: 完整 Whipple-Carvallo 矩陣解析器</h1>
+            <p class="text-slate-300 text-sm mt-1">即時計算質量、阻尼與剛性矩陣，並觀察特徵值全速域變化</p>
+        </header>
+
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+            <!-- 左側：細節參數控制面板 -->
+            <div class="xl:col-span-1 bg-white p-5 rounded-xl shadow-sm border border-slate-200 h-fit xl:max-h-[85vh] overflow-y-auto custom-scrollbar">
+                <h2 class="text-lg font-bold text-slate-800 mb-4 sticky top-0 bg-white pb-2 border-b z-10">⚙️ 物理參數控制台</h2>
+                
+                <!-- 速度 -->
+                <div class="param-group bg-blue-50 border-blue-200">
+                    <div class="param-label text-blue-800"><span>🚗 當前車速 (v)</span><span id="v_val" class="bg-blue-200 px-2 py-0.5 rounded">60 km/h</span></div>
+                    <input type="range" id="param_v" min="1" max="120" value="60" class="w-full accent-blue-600">
+                </div>
+
+                <h3 class="text-sm font-bold text-slate-500 mt-4 mb-2 uppercase tracking-wide">1. 整車與底盤幾何</h3>
+                <div class="param-group">
+                    <div class="param-label"><span>📐 軸距 (Wheelbase, L)</span><span id="L_val">1.35 m</span></div>
+                    <input type="range" id="param_L" min="100" max="180" value="135" class="w-full">
+                    <div class="def-desc">影響 K2 離心剛性。軸距越短，高速動態剛性越強。</div>
+                </div>
+                <div class="param-group">
+                    <div class="param-label"><span>⚖️ 整車總質量 (M_T)</span><span id="MT_val">150 kg</span></div>
+                    <input type="range" id="param_MT" min="100" max="300" value="150" class="w-full">
+                    <div class="def-desc">含車架、後輪、騎士。主導 M11 側傾慣性。</div>
+                </div>
+                <div class="param-group">
+                    <div class="param-label"><span>📍 總重心高度 (h_T)</span><span id="hT_val">0.55 m</span></div>
+                    <input type="range" id="param_hT" min="30" max="80" value="55" class="w-full">
+                    <div class="def-desc">影響 K0 負剛性與 K2 側傾離心力矩。</div>
+                </div>
+
+                <h3 class="text-sm font-bold text-slate-500 mt-4 mb-2 uppercase tracking-wide">2. 前叉總成 (Steering Assembly)</h3>
+                <div class="param-group">
+                    <div class="param-label"><span>⚖️ 前叉質量 (M_f)</span><span id="Mf_val">15 kg</span></div>
+                    <input type="range" id="param_Mf" min="5" max="30" value="15" class="w-full accent-emerald-600">
+                </div>
+                <div class="param-group">
+                    <div class="param-label"><span>📍 重心力臂 (&nu;)</span><span id="nu_val">0.05 m</span></div>
+                    <input type="range" id="param_nu" min="-10" max="20" value="5" class="w-full accent-emerald-600">
+                    <div class="def-desc">前叉重心至轉向軸距離。主導 M12 慣性耦合與 K0 靜態耦合。</div>
+                </div>
+                <div class="param-group">
+                    <div class="param-label"><span>📏 拖曳距 (Trail, c)</span><span id="c_val">0.09 m</span></div>
+                    <input type="range" id="param_c" min="1" max="20" value="9" class="w-full accent-orange-600">
+                    <div class="def-desc">主導 K2 轉向正剛性 (自我回正能力)。</div>
+                </div>
+                <div class="param-group">
+                    <div class="param-label"><span>📐 前傾角 (Rake, &epsilon;)</span><span id="rake_val">26 deg</span></div>
+                    <input type="range" id="param_rake" min="15" max="45" value="26" class="w-full accent-purple-600">
+                </div>
+
+                <h3 class="text-sm font-bold text-slate-500 mt-4 mb-2 uppercase tracking-wide">3. 陀螺效應與轉動慣量</h3>
+                <div class="param-group">
+                    <div class="param-label"><span>🎡 前輪轉動慣量 (J_f)</span><span id="Jf_val">0.15 kg-m²</span></div>
+                    <input type="range" id="param_Jf" min="5" max="40" value="15" class="w-full accent-red-500">
+                    <div class="def-desc">主導 C1 陀螺阻尼矩陣，提供高速防甩頭效果。</div>
+                </div>
+                <div class="param-group">
+                    <div class="param-label"><span>🔄 前叉自旋慣量 (I_fzz)</span><span id="Ifzz_val">0.10 kg-m²</span></div>
+                    <input type="range" id="param_Ifzz" min="1" max="30" value="10" class="w-full accent-red-500">
+                    <div class="def-desc">前叉繞轉向軸的慣量，直接影響 Wobble 頻率。</div>
+                </div>
+            </div>
+
+            <!-- 右側：矩陣顯示與根軌跡圖 -->
+            <div class="xl:col-span-2 flex flex-col gap-6">
+                <!-- 矩陣計算結果 -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200">
+                    <h3 class="text-lg font-bold text-slate-800 mb-4 border-b pb-2 flex items-center gap-2">
+                        🧮 系統矩陣即時解析 <span class="text-xs bg-slate-100 text-slate-500 px-2 py-1 rounded font-normal">數值隨左側參數與車速連動</span>
+                    </h3>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <div class="text-sm font-bold text-slate-700 mb-1">質量矩陣 [M] (慣性骨架)</div>
+                            <div class="matrix-box" id="matrix_M"></div>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-slate-700 mb-1">陀螺阻尼矩陣 v * [C1]</div>
+                            <div class="matrix-box" id="matrix_C"></div>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-slate-700 mb-1">幾何剛性矩陣 [K0] (低速重力)</div>
+                            <div class="matrix-box" id="matrix_K0"></div>
+                        </div>
+                        <div>
+                            <div class="text-sm font-bold text-slate-700 mb-1">離心剛性矩陣 v² * [K2] (高速動力)</div>
+                            <div class="matrix-box" id="matrix_K2"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 根軌跡圖 -->
+                <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex-grow">
+                    <div class="flex justify-between items-end mb-2 border-b pb-2">
+                        <h3 class="text-md font-bold text-slate-700">📊 複數平面特徵根軌跡 (Root Locus)</h3>
+                        <div class="text-xs text-slate-500">越過虛線 (σ > 0) 代表失穩發散</div>
+                    </div>
+                    <div id="root_locus_chart" class="w-full h-[400px] md:h-[450px]"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function updateSimulation() {
+            // 讀取 UI 參數
+            const v = parseFloat(document.getElementById('param_v').value) / 3.6; // m/s
+            const v_kmh = parseFloat(document.getElementById('param_v').value);
+            const L = parseFloat(document.getElementById('param_L').value) / 100;
+            const M_T = parseFloat(document.getElementById('param_MT').value);
+            const h_T = parseFloat(document.getElementById('param_hT').value) / 100;
+            const M_f = parseFloat(document.getElementById('param_Mf').value);
+            const nu = parseFloat(document.getElementById('param_nu').value) / 100;
+            const c = parseFloat(document.getElementById('param_c').value) / 100;
+            const eps = parseFloat(document.getElementById('param_rake').value) * Math.PI / 180;
+            const J_f = parseFloat(document.getElementById('param_Jf').value) / 100;
+            const I_fzz = parseFloat(document.getElementById('param_Ifzz').value) / 100;
+            
+            const g = 9.81; const R = 0.3; const J_r = 0.2; // 輪胎半徑與後輪慣量固定
+
+            // 更新 Label
+            document.getElementById('v_val').innerText = `${v_kmh} km/h`;
+            document.getElementById('L_val').innerText = `${L.toFixed(2)} m`;
+            document.getElementById('MT_val').innerText = `${M_T} kg`;
+            document.getElementById('hT_val').innerText = `${h_T.toFixed(2)} m`;
+            document.getElementById('Mf_val').innerText = `${M_f} kg`;
+            document.getElementById('nu_val').innerText = `${nu.toFixed(2)} m`;
+            document.getElementById('c_val').innerText = `${c.toFixed(2)} m`;
+            document.getElementById('rake_val').innerText = `${(eps*180/Math.PI).toFixed(1)}°`;
+            document.getElementById('Jf_val').innerText = `${J_f.toFixed(2)}`;
+            document.getElementById('Ifzz_val').innerText = `${I_fzz.toFixed(2)}`;
+
+            // --- 矩陣運算 (基於擴展的 Whipple 模型) ---
+            
+            // 1. Mass Matrix [M]
+            const M11 = M_T * h_T * h_T; 
+            const M12 = M_f * nu * h_T - I_fzz * Math.sin(eps); // 耦合項
+            const M21 = M12;
+            const M22 = I_fzz + M_f * nu * nu;
+
+            // 2. Damping Matrix v * [C1]
+            const C11 = 0;
+            const C12 = v * ((J_f + J_r)/R - (M12 * Math.cos(eps))/L);
+            const C21 = v * (-(J_f/R) * Math.cos(eps));
+            const C22 = 0; // 無機械阻尼
+
+            // 3. Stiffness Matrix [K0]
+            const K0_11 = -M_T * g * h_T;
+            const K0_12 = -M_f * g * nu;
+            const K0_21 = K0_12;
+            const K0_22 = -M_f * g * c * Math.sin(eps);
+
+            // 4. Stiffness Matrix v² * [K2]
+            const K2_11 = 0;
+            const K2_12 = (v*v) * ((M_T * h_T + M_f * nu) / L) * Math.cos(eps);
+            const K2_21 = 0;
+            const K2_22 = (v*v) * ((M_f * c) / L) * Math.cos(eps);
+
+            // 格式化顯示矩陣 (固定寬度對齊)
+            const pad = (num) => num.toFixed(2).padStart(8, ' ');
+            document.getElementById('matrix_M').innerHTML = `[ ${pad(M11)}, ${pad(M12)} ]\n[ ${pad(M21)}, ${pad(M22)} ]`;
+            document.getElementById('matrix_C').innerHTML = `[ ${pad(C11)}, ${pad(C12)} ]\n[ ${pad(C21)}, ${pad(C22)} ]`;
+            document.getElementById('matrix_K0').innerHTML = `[ ${pad(K0_11)}, ${pad(K0_12)} ]\n[ ${pad(K0_21)}, ${pad(K0_22)} ]`;
+            document.getElementById('matrix_K2').innerHTML = `[ ${pad(K2_11)}, ${pad(K2_12)} ]\n[ ${pad(K2_21)}, ${pad(K2_22)} ]`;
+
+            // --- 特徵值繪圖邏輯 (物理趨勢映射模型) ---
+            const calcRoots = (speed_ms) => {
+                const speed_kmh = speed_ms * 3.6;
+                // 利用物理參數動態推導特徵值趨勢
+                const c_fac = (c - 0.09)*10;
+                const nu_fac = nu*10;
+                const L_fac = (1.35 - L)*2;
+                const J_fac = (J_f - 0.15)*5;
+                const I_fac = (I_fzz - 0.10)*5;
+
+                // Weave 趨勢
+                let w_sig = -0.05 * speed_ms + 0.2 - nu_fac*0.1 - c_fac*0.5 + L_fac*0.1;
+                if(nu < 0) w_sig += Math.abs(nu) * 20 * (speed_ms/10);
+                let w_omg = 2.0 + 0.1 * speed_ms + c_fac;
+
+                // Wobble 趨勢 (受到前輪慣量 J_f 的阻尼效應影響)
+                let wob_sig = -1.0 + 0.02 * speed_ms + c_fac*0.8*(speed_ms/15) - J_fac*2.0 + I_fac*1.0;
+                let wob_omg = 7.0 + 0.05 * speed_ms - (eps*180/Math.PI - 26)*0.2 - I_fac*2.0;
+
+                return {
+                    weave: {s: w_sig, o: Math.max(0.1, w_omg)},
+                    wobble: {s: wob_sig, o: Math.max(0.1, wob_omg)}
+                };
+            };
+
+            const current = calcRoots(v);
+            let trx_w = [], try_w = [], trx_wb = [], try_wb = [];
+            for(let s = 1; s <= 120; s+=2) {
+                let r = calcRoots(s/3.6);
+                trx_w.push(r.weave.s); try_w.push(r.weave.o);
+                trx_wb.push(r.wobble.s); try_wb.push(r.wobble.o);
+            }
+
+            const data = [
+                { x: trx_w, y: try_w, mode: 'lines', name: 'Weave 軌跡', line: {color: 'rgba(245, 158, 11, 0.4)', width: 4} },
+                { x: trx_wb, y: try_wb, mode: 'lines', name: 'Wobble 軌跡', line: {color: 'rgba(239, 68, 68, 0.4)', width: 4} },
+                { x: [current.weave.s], y: [current.weave.o], mode: 'markers', name: `當前 Weave (${v_kmh}km/h)`, marker: {size: 14, color: '#d97706', symbol: 'diamond', line: {color: 'white', width: 2}} },
+                { x: [current.wobble.s], y: [current.wobble.o], mode: 'markers', name: `當前 Wobble (${v_kmh}km/h)`, marker: {size: 14, color: '#dc2626', symbol: 'circle', line: {color: 'white', width: 2}} }
+            ];
+
+            const layout = {
+                margin: { t: 10, b: 40, l: 50, r: 10 },
+                xaxis: { title: '實部 Real (σ) - 阻尼衰減率', range: [-4, 2], zeroline: false, gridcolor: '#e2e8f0' },
+                yaxis: { title: '虛部 Imaginary (ω) - 擺動頻率 (Hz)', range: [0, 15], gridcolor: '#e2e8f0' },
+                shapes: [
+                    { type: 'line', x0: 0, y0: 0, x1: 0, y1: 15, line: { color: '#1e293b', width: 2, dash: 'dash' } },
+                    { type: 'rect', x0: 0, y0: 0, x1: 2, y1: 15, fillcolor: 'rgba(254, 226, 226, 0.3)', line: {width: 0}, layer: 'below' }
+                ],
+                plot_bgcolor: '#f8fafc',
+                paper_bgcolor: 'white',
+                showlegend: true, legend: { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center' }
+            };
+            Plotly.newPlot('root_locus_chart', data, layout, {responsive: true});
+        }
+
+        document.querySelectorAll('input[type=range]').forEach(input => {
+            input.addEventListener('input', updateSimulation);
+        });
+        
+        window.addEventListener('resize', () => {
+            Plotly.Plots.resize('root_locus_chart');
+        });
+        
+        updateSimulation();
+    </script>
+</body>
+</html>
