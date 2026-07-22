@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gogoro 8-bit 車載視覺模擬器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #050505; color: white; font-family: 'Inter', sans-serif; }
+        .dashboard-container {
+            position: relative;
+            width: 100%;
+            max-width: 900px;
+            aspect-ratio: 900 / 424; 
+            margin: 0 auto;
+            background-color: #000;
+            border-radius: 40px;
+            overflow: visible; 
+            box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 10px 30px rgba(0,0,0,0.5);
+            border: 2px solid #333;
+        }
+        .dashboard-bg {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-image: url('1RB外框.png'); 
+            background-size: cover;
+            background-position: center;
+            border-radius: 38px;
+            pointer-events: none;
+            z-index: 20; /* 放在 SVG 上層當作遮罩 */
+            mix-blend-mode: multiply; /* 讓白色的部分透出底層的光，黑色的部分維持純黑 */
+        }
+        #svgOverlay {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            z-index: 10; /* 放在遮罩下層 */
+        }
+        .panel { background: rgba(20, 20, 20, 0.95); border: 1px solid #333; border-radius: 12px; padding: 20px; }
+        input[type=range] { accent-color: #06b6d4; }
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #111; }
+        ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #555; }
+    </style>
+</head>
+<body class="min-h-screen p-4 md:p-8 flex flex-col gap-6">
+
+    <div class="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
+        
+        <div class="panel lg:col-span-1 flex flex-col gap-6">
+            <div>
+                <h1 class="text-2xl font-bold text-cyan-400 mb-2">Ambilight 模擬器</h1>
+                <p class="text-gray-400 text-sm mb-4">環境色彩感知與 CAN Bus 映射</p>
+                
+                <label class="block w-full border-2 border-dashed border-gray-600 hover:border-cyan-400 p-6 rounded-lg text-center cursor-pointer transition-colors">
+                    <span class="text-gray-300">上傳環境測試圖片</span>
+                    <input type="file" id="imageUpload" accept="image/*" class="hidden">
+                </label>
+            </div>
+
+            <div>
+                <h3 class="text-lg font-semibold mb-3">色彩擷取參數</h3>
+                
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-400 mb-1">全局亮度增益 (Value Boost)</label>
+                    <input type="range" id="brightnessSlider" min="0.5" max="2.0" step="0.1" value="1.0" class="w-full">
+                </div>
+
+                <div class="mb-4">
+                    <label class="block text-sm text-gray-400 mb-1">演算法選擇</label>
+                    <select id="algoSelect" class="w-full bg-gray-900 text-white border border-gray-700 rounded p-2 outline-none focus:border-cyan-500">
+                        <option value="polar">極座標射線投影法 (Polar Ray)</option>
+                        <option value="edge">邊緣區塊平均法 (Edge Block Avg)</option>
+                        <option value="kmeans" selected>K-Means 主色萃取法 (K-Means)</option>
+                    </select>
+                </div>
+
+                <div id="dynamicParams" class="space-y-4 bg-gray-900 p-4 rounded-lg border border-gray-800 shadow-inner">
+                    <!-- 動態參數區 -->
+                </div>
+                
+                <div id="algoDesc" class="mt-4 p-3 bg-gray-800/80 rounded-lg text-xs text-gray-300 border border-gray-700 leading-relaxed shadow-inner">
+                    <!-- 動態說明文字區 -->
+                </div>
+            </div>
+            
+            <div class="mt-auto">
+                <canvas id="sourceCanvas" class="w-full rounded bg-black border border-gray-800 shadow"></canvas>
+            </div>
+        </div>
+
+        <div class="panel lg:col-span-2 flex flex-col">
+            <h2 class="text-xl font-bold mb-4">實體導光條漸層即時預覽 (數學對稱版)</h2>
+            
+            <div class="dashboard-container mb-6" id="dashboard">
+                <div class="dashboard-bg"></div>
+                
+                <!-- HUD 戰情板 -->
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
+                    <div class="bg-black/85 p-3 rounded-lg border border-cyan-500/40 text-[10px] sm:text-xs text-cyan-300 grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1 backdrop-blur-md shadow-2xl" id="hvGrid">
+                        <div class="col-span-full text-center text-gray-500 mb-1">等待影像解析...</div>
+                    </div>
+                </div>
+                
+                <!-- SVG 光條渲染區 -->
+                <svg id="svgOverlay" viewBox="0 0 900 424" preserveAspectRatio="none"></svg>
+            </div>
+
+            <!-- CAN Bus 輸出區 -->
+            <div class="bg-black/50 p-4 rounded-lg border border-gray-800 flex-grow flex flex-col">
+                <div class="flex justify-between items-center mb-2">
+                    <h3 class="text-cyan-400 font-bold font-mono">PCAN TX Payload (ID: 0x0AA)</h3>
+                    <button id="copyBtn" class="bg-cyan-700 hover:bg-cyan-600 text-white text-xs py-1.5 px-4 rounded shadow cursor-pointer transition-colors active:scale-95">複製 Payload</button>
+                </div>
+                <textarea id="dataOutput" class="w-full h-full min-h-[60px] bg-[#0a0a0a] text-[#0f0] font-mono text-sm p-3 rounded border border-gray-700 resize-none outline-none" readonly>等待影像載入後產生...</textarea>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const imageUpload = document.getElementById('imageUpload');
+        const sourceCanvas = document.getElementById('sourceCanvas');
+        const ctx = sourceCanvas.getContext('2d', { willReadFrequently: true });
+        const brightnessSlider = document.getElementById('brightnessSlider');
+        const algoSelect = document.getElementById('algoSelect');
+        const dynamicParams = document.getElementById('dynamicParams');
+        
+        let currentImageData = null;
+        let segmentElements = {}; 
+
+        const SEGMENTS = [
+            // 上方 1 條 (I1-I2)
+            { id: 'I1_I2', nodes: ['I1', 'I2'], d: 'M 200 40 L 700 40' }, 
+            
+            // 右方 3 條 (I3-I4, I5-I6, I7-I8)
+            { id: 'I3_I4', nodes: ['I3', 'I4'], d: 'M 720 45 Q 850 45 850 140' }, 
+            { id: 'I5_I6', nodes: ['I5', 'I6'], d: 'M 855 160 L 855 264' },
+            { id: 'I7_I8', nodes: ['I7', 'I8'], d: 'M 850 284 Q 850 379 720 379' },
+            
+            // 下方 3 條 (J1-J2, J3-J4, J5-J6) - 方向為右至左
+            { id: 'J1_J2', nodes: ['J1', 'J2'], d: 'M 690 385 L 530 385' }, 
+            { id: 'J3_J4', nodes: ['J3', 'J4'], d: 'M 510 385 L 390 385' }, 
+            { id: 'J5_J6', nodes: ['J5', 'J6'], d: 'M 370 385 L 210 385' }, 
+            
+            // 左方 3 條 (J7-J8, K1-K2, K3-K4) - 方向為下至上
+            { id: 'J7_J8', nodes: ['J7', 'J8'], d: 'M 180 379 Q 50 379 50 284' }, 
+            { id: 'K1_K2', nodes: ['K1', 'K2'], d: 'M 45 264 L 45 160' }, 
+            { id: 'K3_K4', nodes: ['K3', 'K4'], d: 'M 50 140 Q 50 45 180 45' }  
+        ];
+
+        const LED_SAMPLING_ANGLES = [
+            { id: 'I1', angle: 0 }, { id: 'I2', angle: 337.5 }, { id: 'I3', angle: 315 },
+            { id: 'I4', angle: 292.5 }, { id: 'I5', angle: 270 }, { id: 'I6', angle: 247.5 },
+            { id: 'I7', angle: 225 }, { id: 'I8', angle: 202.5 }, { id: 'J1', angle: 180 },
+            { id: 'J2', angle: 168.75 }, { id: 'J3', angle: 157.5 }, { id: 'J4', angle: 146.25 },
+            { id: 'J5', angle: 135 }, { id: 'J6', angle: 123.75 }, { id: 'J7', angle: 112.5 },
+            { id: 'J8', angle: 101.25 }, { id: 'K1', angle: 90 }, { id: 'K2', angle: 67.5 },
+            { id: 'K3', angle: 45 }, { id: 'K4', angle: 22.5 }
+        ];
+
+        const ALGO_DESCRIPTIONS = {
+            polar: "<strong class='text-cyan-400'>極座標射線投影法 (Polar Ray)</strong><br>從影像中心發射 20 條射線擷取指定半徑像素。精確映射方位，適合捕捉主體色彩。",
+            edge: "<strong class='text-cyan-400'>邊緣區塊平均法 (Edge Block Avg)</strong><br>將外圍劃分為 20 個扇形區塊計算平均色。變化柔和均勻，但遇複雜背景易產生灰色調。",
+            kmeans: "<strong class='text-cyan-400'>K-Means 主色萃取法 (K-Means)</strong><br>利用 AI 分群演算法，自動從各區塊排除雜色，萃取出「飽和度x亮度最高」的主色。對比視覺衝擊力最佳！"
+        };
+
+        const PARAMS = { radius: 85, margin: 20, kvalue: 3 };
+
+        function buildParamUI() {
+            const algo = algoSelect.value;
+            dynamicParams.innerHTML = '';
+            document.getElementById('algoDesc').innerHTML = ALGO_DESCRIPTIONS[algo];
+            
+            const createSlider = (id, label, min, max, step, value, onChange) => {
+                const wrapper = document.createElement('div');
+                wrapper.innerHTML = `<label class="flex justify-between text-sm text-gray-400 mb-1"><span>${label}</span><span id="${id}Val">${value}</span></label>
+                                     <input type="range" id="${id}" min="${min}" max="${max}" step="${step}" value="${value}" class="w-full">`;
+                dynamicParams.appendChild(wrapper);
+                const slider = wrapper.querySelector(`#${id}`);
+                slider.addEventListener('input', (e) => {
+                    wrapper.querySelector(`#${id}Val`).innerText = e.target.value;
+                    onChange(e.target.value);
+                });
+            };
+
+            if (algo === 'polar') {
+                createSlider('radiusSlider', '射線採樣半徑 (%)', 10, 100, 1, PARAMS.radius, (v) => { PARAMS.radius = v; if(currentImageData) processImageColors(currentImageData); });
+            } else {
+                createSlider('marginSlider', '邊緣厚度 (Margin %)', 5, 50, 1, PARAMS.margin, (v) => { PARAMS.margin = v; if(currentImageData) processImageColors(currentImageData); });
+                if (algo === 'kmeans') {
+                    createSlider('kvalueSlider', '叢集萃取數量 (K)', 2, 5, 1, PARAMS.kvalue, (v) => { PARAMS.kvalue = parseInt(v); if(currentImageData) processImageColors(currentImageData); });
+                }
+            }
+        }
+
+        function initSvgSegments() {
+            const svg = document.getElementById('svgOverlay');
+            svg.innerHTML = '';
+            const defs = document.createElementNS("http://www.w3.org/2000/svg", "defs");
+            svg.appendChild(defs);
+
+            SEGMENTS.forEach((seg, index) => {
+                const parts = seg.d.split(/[\s,]+/);
+                const startX = parts[1];
+                const startY = parts[2];
+                const endX = parts[parts.length - 2];
+                const endY = parts[parts.length - 1];
+
+                const gradId = `grad_${index}`;
+                const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
+                grad.setAttribute("id", gradId);
+                
+                grad.setAttribute("gradientUnits", "userSpaceOnUse"); 
+                grad.setAttribute("x1", startX);
+                grad.setAttribute("y1", startY);
+                grad.setAttribute("x2", endX);
+                grad.setAttribute("y2", endY);
+
+                const stop1 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+                stop1.setAttribute("offset", "0%");
+                stop1.setAttribute("stop-color", "#111"); 
+                
+                const stop2 = document.createElementNS("http://www.w3.org/2000/svg", "stop");
+                stop2.setAttribute("offset", "100%");
+                stop2.setAttribute("stop-color", "#111");
+
+                grad.appendChild(stop1);
+                grad.appendChild(stop2);
+                defs.appendChild(grad);
+
+                const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+                path.setAttribute("d", seg.d);
+                path.setAttribute("stroke", `url(#${gradId})`);
+                path.setAttribute("stroke-width", "35"); // 加粗！保證能填滿外框遮罩的縫隙
+                path.setAttribute("stroke-linecap", "butt"); // 遮罩會處理圓角，這裡用平頭即可
+                path.setAttribute("fill", "none");
+
+                svg.appendChild(path);
+                
+                segmentElements[seg.nodes[0]] = stop1;
+                segmentElements[seg.nodes[1]] = stop2;
+            });
+        }
+
+        function rgbToHsv(r, g, b) {
+            r /= 255; g /= 255; b /= 255;
+            let v = Math.max(r, g, b), c = v - Math.min(r, g, b);
+            let h = c === 0 ? 0 : v === r ? (g - b) / c : v === g ? 2 + (b - r) / c : 4 + (r - g) / c;
+            return { h: 60 * (h < 0 ? h + 6 : h), s: v === 0 ? 0 : c / v * 100, v: v * 100 };
+        }
+
+        // 空間像素分桶器
+        function bucketEdgePixels(imageData) {
+            const data = imageData.data, w = imageData.width, h = imageData.height;
+            const cx = w / 2, cy = h / 2;
+            const marginRatio = PARAMS.margin / 100;
+            const innerRx = cx * (1 - marginRatio), innerRy = cy * (1 - marginRatio);
+            let buckets = Array.from({length: 20}, () => []);
+
+            for (let y = 0; y < h; y += 2) {
+                for (let x = 0; x < w; x += 2) {
+                    const dx = x - cx, dy = cy - y; 
+                    if ((dx*dx)/(innerRx*innerRx) + (dy*dy)/(innerRy*innerRy) > 1) {
+                        let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                        if (angle < 0) angle += 360;
+                        
+                        let minDiff = 360, bestIdx = 0;
+                        LED_SAMPLING_ANGLES.forEach((node, idx) => {
+                            let diff = Math.abs(node.angle - angle);
+                            if (diff > 180) diff = 360 - diff;
+                            if (diff < minDiff) { minDiff = diff; bestIdx = idx; }
+                        });
+                        
+                        const idx = (y * w + x) * 4;
+                        buckets[bestIdx].push({ r: data[idx], g: data[idx+1], b: data[idx+2] });
+                    }
+                }
+            }
+            return buckets;
+        }
+
+        function processImageColors(imageData) {
+            const algo = algoSelect.value;
+            let extractedColors = new Array(20).fill({r:0,g:0,b:0});
+
+            if (algo === 'polar') {
+                const w = imageData.width, h = imageData.height, data = imageData.data;
+                const cx = w / 2, cy = h / 2;
+                const targetR = Math.min(cx, cy) * (PARAMS.radius / 100);
+
+                LED_SAMPLING_ANGLES.forEach((node, idx) => {
+                    const rad = node.angle * Math.PI / 180;
+                    const px = Math.floor(cx + targetR * Math.cos(rad));
+                    const py = Math.floor(cy - targetR * Math.sin(rad)); 
+                    if (px >= 0 && px < w && py >= 0 && py < h) {
+                        const i = (py * w + px) * 4;
+                        extractedColors[idx] = { r: data[i], g: data[i+1], b: data[i+2] };
+                    }
+                });
+            } else {
+                const buckets = bucketEdgePixels(imageData);
+                if (algo === 'edge') {
+                    buckets.forEach((b, idx) => {
+                        if (b.length === 0) return;
+                        let sum = b.reduce((acc, val) => { acc.r+=val.r; acc.g+=val.g; acc.b+=val.b; return acc; }, {r:0,g:0,b:0});
+                        extractedColors[idx] = { r: sum.r/b.length, g: sum.g/b.length, b: sum.b/b.length };
+                    });
+                } else if (algo === 'kmeans') {
+                    buckets.forEach((b, idx) => {
+                        if (b.length === 0) return;
+                        let samples = b.sort(() => 0.5 - Math.random()).slice(0, 300);
+                        let bestScore = -1, bestColor = samples[0];
+                        samples.forEach(c => {
+                            const hsv = rgbToHsv(c.r, c.g, c.b);
+                            const score = hsv.s * hsv.v; 
+                            if (score > bestScore) { bestScore = score; bestColor = c; }
+                        });
+                        extractedColors[idx] = bestColor;
+                    });
+                }
+            }
+
+            renderSegmentsAndOutputCAN(extractedColors);
+        }
+
+        function renderSegmentsAndOutputCAN(colorsArray) {
+            const boost = parseFloat(brightnessSlider.value);
+            let payloadData = [0xFE, 0x2C, 0x46]; // CAN Header
+            let hvHtml = '';
+
+            LED_SAMPLING_ANGLES.forEach((node, index) => {
+                const color = colorsArray[index];
+                const hsv = rgbToHsv(color.r, color.g, color.b);
+                let finalVal = Math.min(100, hsv.v * boost);
+                
+                const stopElement = segmentElements[node.id];
+                if (stopElement) {
+                    const cssColor = finalVal > 5 ? `hsl(${hsv.h}, ${hsv.s}%, 50%)` : '#111';
+                    stopElement.setAttribute("stop-color", cssColor);
+                }
+
+                const hueInt = Math.floor(hsv.h);
+                const valInt = Math.floor(finalVal);
+                const byte0 = hueInt & 0xFF;
+                const byte1 = (((hueInt >> 8) & 0x01) << 7) | (valInt & 0x7F);
+                payloadData.push(byte0, byte1);
+
+                hvHtml += `<div class="flex justify-between items-center bg-gray-900/90 px-1.5 py-0.5 rounded border border-gray-700/50">
+                            <span class="text-gray-400 font-bold w-5">${node.id}</span> 
+                            <span class="font-mono text-[11px]">
+                                <span class="text-purple-400">H</span>${hueInt.toString().padStart(3,'0')} 
+                                <span class="text-yellow-400">V</span>${valInt.toString().padStart(3,'0')}
+                            </span>
+                           </div>`;
+            });
+
+            // 計算 CRC 驗證碼: (-sum) & 0xFF
+            let sum = 0;
+            payloadData.forEach(b => sum += b);
+            const crc = (-sum) & 0xFF;
+            payloadData.push(crc);
+
+            const hexString = payloadData.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+            document.getElementById('dataOutput').value = hexString;
+            document.getElementById('hvGrid').innerHTML = hvHtml;
+        }
+
+        algoSelect.addEventListener('change', () => {
+            buildParamUI();
+            if (currentImageData) processImageColors(currentImageData);
+        });
+
+        brightnessSlider.addEventListener('input', () => {
+            if (currentImageData) processImageColors(currentImageData);
+        });
+
+        document.getElementById('copyBtn').addEventListener('click', () => {
+            const textArea = document.getElementById('dataOutput');
+            if(!textArea.value || textArea.value.includes('等待')) return;
+            textArea.select();
+            document.execCommand('copy');
+            const btn = document.getElementById('copyBtn');
+            btn.innerText = '已複製!';
+            btn.classList.replace('bg-cyan-700', 'bg-green-600');
+            setTimeout(() => {
+                btn.innerText = '複製 Payload';
+                btn.classList.replace('bg-green-600', 'bg-cyan-700');
+            }, 2000);
+        });
+
+        imageUpload.addEventListener('change', (e) => {
+            if (e.target.files && e.target.files[0]) {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = () => {
+                        const scale = Math.min(400 / img.width, 300 / img.height);
+                        sourceCanvas.width = img.width * scale;
+                        sourceCanvas.height = img.height * scale;
+                        ctx.drawImage(img, 0, 0, sourceCanvas.width, sourceCanvas.height);
+                        currentImageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+                        processImageColors(currentImageData);
+                    };
+                    img.src = ev.target.result;
+                };
+                reader.readAsDataURL(e.target.files[0]);
+            }
+        });
+
+        buildParamUI();
+        initSvgSegments();
+    </script>
+</body>
+</html>
