@@ -45,6 +45,7 @@
 
     <div class="max-w-6xl mx-auto w-full grid grid-cols-1 lg:grid-cols-3 gap-6">
         
+        <!-- 左側控制面板 -->
         <div class="panel lg:col-span-1 flex flex-col gap-6">
             <div>
                 <h1 class="text-2xl font-bold text-cyan-400 mb-2">Ambilight 模擬器</h1>
@@ -88,13 +89,14 @@
             </div>
         </div>
 
+        <!-- 右側預覽與 CAN Payload 輸出 -->
         <div class="panel lg:col-span-2 flex flex-col">
             <h2 class="text-xl font-bold mb-4">實體導光條漸層即時預覽 (遮罩流裁切版)</h2>
             
             <div class="dashboard-container mb-6" id="dashboard">
                 <div class="dashboard-bg"></div>
                 
-                <!-- HUD 戰情板 (現在包含 H/S/V) -->
+                <!-- HUD 戰情板 (包含 H/S/V) -->
                 <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
                     <div class="bg-black/85 p-3 rounded-lg border border-cyan-500/40 text-[10px] text-cyan-300 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-x-2 gap-y-1 backdrop-blur-md shadow-2xl" id="hvGrid">
                         <div class="col-span-full text-center text-gray-500 mb-1">等待影像解析...</div>
@@ -105,12 +107,25 @@
                 <svg id="svgOverlay" viewBox="0 0 900 424" preserveAspectRatio="none"></svg>
             </div>
 
-            <div class="bg-black/50 p-4 rounded-lg border border-gray-800 flex-grow flex flex-col">
-                <div class="flex justify-between items-center mb-2">
-                    <h3 class="text-cyan-400 font-bold font-mono">PCAN TX Payload (ID: 0x0AA)</h3>
-                    <button id="copyBtn" class="bg-cyan-700 hover:bg-cyan-600 text-white text-xs py-1.5 px-4 rounded shadow cursor-pointer transition-colors active:scale-95">複製 Payload</button>
+            <!-- CAN Payload 輸出區 (包含 V1 與 V2 3-Byte 擴增版) -->
+            <div class="bg-black/50 p-4 rounded-lg border border-gray-800 flex-grow flex flex-col gap-3">
+                <!-- V1 Standard 2-Byte Payload -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <h3 class="text-cyan-400 font-bold font-mono text-xs">PCAN TX Payload V1 Standard (0x0AA - 2 Bytes/LED, Len: 0x2C)</h3>
+                        <button id="copyBtnV1" class="bg-cyan-800 hover:bg-cyan-700 text-white text-[10px] py-1 px-3 rounded cursor-pointer transition-colors active:scale-95">複製 V1 Payload</button>
+                    </div>
+                    <textarea id="dataOutput" class="w-full h-12 bg-[#0a0a0a] text-[#0f0] font-mono text-xs p-2 rounded border border-gray-800 resize-none outline-none" readonly>等待影像載入後產生...</textarea>
                 </div>
-                <textarea id="dataOutput" class="w-full h-full min-h-[60px] bg-[#0a0a0a] text-[#0f0] font-mono text-sm p-3 rounded border border-gray-700 resize-none outline-none" readonly>等待影像載入後產生...</textarea>
+
+                <!-- V2 Expanded 3-Byte Payload (支援 Saturation) -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <h3 class="text-purple-400 font-bold font-mono text-xs">PCAN TX Payload V2 Expanded (0x0AA - 3 Bytes/LED, Len: 0x40, 支援飽和度)</h3>
+                        <button id="copyBtnV2" class="bg-purple-700 hover:bg-purple-600 text-white text-[10px] py-1 px-3 rounded cursor-pointer transition-colors active:scale-95">複製 V2 Payload</button>
+                    </div>
+                    <textarea id="dataOutputV2" class="w-full h-16 bg-[#0a0a0a] text-[#0f0] font-mono text-xs p-2 rounded border border-gray-800 resize-none outline-none" readonly>等待影像載入後產生...</textarea>
+                </div>
             </div>
         </div>
     </div>
@@ -208,7 +223,7 @@
                 const gradId = `grad_${index}`;
                 const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
                 grad.setAttribute("id", gradId);
-                grad.setAttribute("gradientUnits", "userSpaceOnUse"); // 解決水平線消失的 Bug
+                grad.setAttribute("gradientUnits", "userSpaceOnUse"); // 解決水平線無效的 Bug
                 grad.setAttribute("x1", startX);
                 grad.setAttribute("y1", startY);
                 grad.setAttribute("x2", endX);
@@ -229,8 +244,7 @@
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 path.setAttribute("d", seg.d);
                 path.setAttribute("stroke", `url(#${gradId})`);
-                path.setAttribute("stroke-width", "40"); // 加寬以填滿外框遮罩
-                path.setAttribute("stroke-linecap", "butt"); 
+                path.setAttribute("stroke-width", "40"); // 加寬填滿外框遮罩
                 path.setAttribute("fill", "none");
 
                 svg.appendChild(path);
@@ -256,11 +270,9 @@
 
             for (let y = 0; y < h; y += 2) {
                 for (let x = 0; x < w; x += 2) {
-                    const dx = x - cx, dy = y - cy; // dy 向下為正 (Canvas 特性)
+                    const dx = x - cx, dy = y - cy; 
                     
                     if ((dx*dx)/(innerRx*innerRx) + (dy*dy)/(innerRy*innerRy) > 1) {
-                        // 修正角度計算: 0度在正上方(dx=0, dy=-R), 270度在正右方(dx=R, dy=0)
-                        // Math.atan2(y, x). 我們傳入 (-dx, -dy)
                         let angle = Math.atan2(-dx, -dy) * 180 / Math.PI;
                         if (angle < 0) angle += 360;
                         
@@ -282,13 +294,12 @@
         function processImageColors() {
             if (!currentImage) return;
 
-            // 1. 每次處理前，重繪原始圖片 (清除上一筆的十字標記)
             ctx.drawImage(currentImage, 0, 0, sourceCanvas.width, sourceCanvas.height);
             const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
             
             const algo = algoSelect.value;
             let extractedColors = new Array(20).fill({r:0,g:0,b:0});
-            let samplingPoints = []; // 紀錄要畫在畫面上的點
+            let samplingPoints = []; 
 
             if (algo === 'polar') {
                 const w = imageData.width, h = imageData.height, data = imageData.data;
@@ -297,7 +308,6 @@
 
                 LED_SAMPLING_ANGLES.forEach((node, idx) => {
                     const rad = node.angle * Math.PI / 180;
-                    // 修正數學：0度正上方，270度正右方
                     const px = Math.floor(cx - targetR * Math.sin(rad));
                     const py = Math.floor(cy - targetR * Math.cos(rad)); 
                     
@@ -314,7 +324,6 @@
                         if (b.length === 0) return;
                         let sum = b.reduce((acc, val) => { acc.r+=val.r; acc.g+=val.g; acc.b+=val.b; return acc; }, {r:0,g:0,b:0});
                         extractedColors[idx] = { r: sum.r/b.length, g: sum.g/b.length, b: sum.b/b.length };
-                        // 取該區塊的中心點畫標記
                         if(b.length > 0) samplingPoints.push({x: b[Math.floor(b.length/2)].x, y: b[Math.floor(b.length/2)].y, label: LED_SAMPLING_ANGLES[idx].id});
                     });
                 } else if (algo === 'kmeans') {
@@ -324,7 +333,7 @@
                         let bestScore = -1, bestColor = samples[0];
                         samples.forEach(c => {
                             const hsv = rgbToHsv(c.r, c.g, c.b);
-                            const score = hsv.s * hsv.v; // Saturation 佔了極大的比重！
+                            const score = hsv.s * hsv.v;
                             if (score > bestScore) { bestScore = score; bestColor = c; }
                         });
                         extractedColors[idx] = bestColor;
@@ -341,59 +350,80 @@
             ctx.fillStyle = '#0ff';
             ctx.font = '10px monospace';
             points.forEach(pt => {
-                // 畫十字
                 ctx.beginPath();
                 ctx.moveTo(pt.x - 4, pt.y); ctx.lineTo(pt.x + 4, pt.y);
                 ctx.moveTo(pt.x, pt.y - 4); ctx.lineTo(pt.x, pt.y + 4);
                 ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
                 ctx.lineWidth = 1;
                 ctx.stroke();
-                // 畫文字
                 ctx.fillText(pt.label, pt.x + 5, pt.y + 5);
             });
         }
 
         function renderSegmentsAndOutputCAN(colorsArray) {
             const boost = parseFloat(brightnessSlider.value);
-            let payloadData = [0xFE, 0x2C, 0x46]; // CAN Header
+            let payloadData_V1 = [0xFE, 0x2C, 0x46]; // CAN Header V1 (44 Bytes)
+            let payloadData_V2 = [0xFE, 0x40, 0x46]; // CAN Header V2 (64 Bytes)
             let hvHtml = '';
 
             LED_SAMPLING_ANGLES.forEach((node, index) => {
                 const color = colorsArray[index];
                 const hsv = rgbToHsv(color.r, color.g, color.b);
                 let finalVal = Math.min(100, hsv.v * boost);
+                let finalSat = Math.min(100, hsv.s);
                 
                 const stopElement = segmentElements[node.id];
                 if (stopElement) {
-                    const cssColor = finalVal > 5 ? `hsl(${hsv.h}, ${hsv.s}%, 50%)` : '#111';
+                    const cssColor = finalVal > 5 ? `hsl(${hsv.h}, ${finalSat}%, 50%)` : '#111';
                     stopElement.setAttribute("stop-color", cssColor);
                 }
 
                 const hueInt = Math.floor(hsv.h);
                 const valInt = Math.floor(finalVal);
-                const byte0 = hueInt & 0xFF;
-                const byte1 = (((hueInt >> 8) & 0x01) << 7) | (valInt & 0x7F);
-                payloadData.push(byte0, byte1);
+                const satInt = Math.floor(finalSat);
 
-                // HUD 戰情板更新 (現在加入 S 飽和度顯示)
+                // --- V1 Standard 2-Byte Payload (0x2C = 44 Bytes) ---
+                const v1_b0 = hueInt & 0xFF;
+                const v1_b1 = (((hueInt >> 8) & 0x01) << 7) | (valInt & 0x7F);
+                payloadData_V1.push(v1_b0, v1_b1);
+
+                // --- V2 Expanded 3-Byte Payload (0x40 = 64 Bytes, 依據 image_b182f9.png 規範) ---
+                // Byte 0: Hue[7:0]
+                // Byte 1: Hue[8] (Bit 7) | Value[6:0] (Bit 6-0)
+                // Byte 2: x (Bit 7 = 0) | Saturation[6:0] (Bit 6-0)
+                const v2_b0 = hueInt & 0xFF;
+                const v2_b1 = (((hueInt >> 8) & 0x01) << 7) | (valInt & 0x7F);
+                const v2_b2 = satInt & 0x7F;
+                payloadData_V2.push(v2_b0, v2_b1, v2_b2);
+
+                // --- HUD 戰情板更新 (顯示 H, S, V) ---
                 hvHtml += `<div class="flex justify-between items-center bg-gray-900/90 px-1 py-0.5 rounded border border-gray-700/50">
                             <span class="text-gray-400 font-bold w-4">${node.id}</span> 
                             <span class="font-mono text-[10px] flex gap-1">
                                 <span><span class="text-purple-400">H</span>${hueInt.toString().padStart(3,'0')}</span>
-                                <span><span class="text-blue-400">S</span>${Math.floor(hsv.s).toString().padStart(3,'0')}</span>
+                                <span><span class="text-blue-400">S</span>${satInt.toString().padStart(3,'0')}</span>
                                 <span><span class="text-yellow-400">V</span>${valInt.toString().padStart(3,'0')}</span>
                             </span>
                            </div>`;
             });
 
-            // 計算 CRC 驗證碼: (-sum) & 0xFF
-            let sum = 0;
-            payloadData.forEach(b => sum += b);
-            const crc = (-sum) & 0xFF;
-            payloadData.push(crc);
+            // 計算 V1 CRC 驗證碼: (-sum) & 0xFF
+            let sum1 = 0;
+            payloadData_V1.forEach(b => sum1 += b);
+            const crc1 = (-sum1) & 0xFF;
+            payloadData_V1.push(crc1);
 
-            const hexString = payloadData.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
-            document.getElementById('dataOutput').value = hexString;
+            // 計算 V2 CRC 驗證碼: (-sum) & 0xFF
+            let sum2 = 0;
+            payloadData_V2.forEach(b => sum2 += b);
+            const crc2 = (-sum2) & 0xFF;
+            payloadData_V2.push(crc2);
+
+            const hexStringV1 = payloadData_V1.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+            const hexStringV2 = payloadData_V2.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+            document.getElementById('dataOutput').value = hexStringV1;
+            document.getElementById('dataOutputV2').value = hexStringV2;
             document.getElementById('hvGrid').innerHTML = hvHtml;
         }
 
@@ -406,17 +436,31 @@
             processImageColors();
         });
 
-        document.getElementById('copyBtn').addEventListener('click', () => {
+        document.getElementById('copyBtnV1').addEventListener('click', () => {
             const textArea = document.getElementById('dataOutput');
             if(!textArea.value || textArea.value.includes('等待')) return;
             textArea.select();
             document.execCommand('copy');
-            const btn = document.getElementById('copyBtn');
-            btn.innerText = '已複製!';
-            btn.classList.replace('bg-cyan-700', 'bg-green-600');
+            const btn = document.getElementById('copyBtnV1');
+            btn.innerText = '已複製 V1!';
+            btn.classList.replace('bg-cyan-800', 'bg-green-600');
             setTimeout(() => {
-                btn.innerText = '複製 Payload';
-                btn.classList.replace('bg-green-600', 'bg-cyan-700');
+                btn.innerText = '複製 V1 Payload';
+                btn.classList.replace('bg-green-600', 'bg-cyan-800');
+            }, 2000);
+        });
+
+        document.getElementById('copyBtnV2').addEventListener('click', () => {
+            const textArea = document.getElementById('dataOutputV2');
+            if(!textArea.value || textArea.value.includes('等待')) return;
+            textArea.select();
+            document.execCommand('copy');
+            const btn = document.getElementById('copyBtnV2');
+            btn.innerText = '已複製 V2!';
+            btn.classList.replace('bg-purple-700', 'bg-green-600');
+            setTimeout(() => {
+                btn.innerText = '複製 V2 Payload';
+                btn.classList.replace('bg-green-600', 'bg-purple-700');
             }, 2000);
         });
 
