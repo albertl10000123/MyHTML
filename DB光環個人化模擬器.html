@@ -14,28 +14,24 @@
             aspect-ratio: 900 / 424; 
             margin: 0 auto;
             background-color: #000;
-            border-radius: 40px;
             overflow: visible; 
-            box-shadow: inset 0 0 50px rgba(0,0,0,0.8), 0 10px 30px rgba(0,0,0,0.5);
-            border: 2px solid #333;
+            border: 1px solid #111;
         }
         .dashboard-bg {
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-image: url('1RB外框.png'); 
-            background-size: cover;
-            background-position: center;
-            border-radius: 38px;
+            background-image: url('1RB外框.png'); /* 使用遮罩圖 */
+            background-size: 100% 100%;
             pointer-events: none;
-            z-index: 20; /* 放在 SVG 上層當作遮罩 */
-            mix-blend-mode: multiply; /* 讓白色的部分透出底層的光，黑色的部分維持純黑 */
+            z-index: 20; 
+            mix-blend-mode: multiply; /* 黑色不透光，透明/白色處透光 */
         }
         #svgOverlay {
             position: absolute;
             top: 0; left: 0;
             width: 100%; height: 100%;
             pointer-events: none;
-            z-index: 10; /* 放在遮罩下層 */
+            z-index: 10; 
         }
         .panel { background: rgba(20, 20, 20, 0.95); border: 1px solid #333; border-radius: 12px; padding: 20px; }
         input[type=range] { accent-color: #06b6d4; }
@@ -86,20 +82,21 @@
                 </div>
             </div>
             
-            <div class="mt-auto">
+            <div class="mt-auto relative">
                 <canvas id="sourceCanvas" class="w-full rounded bg-black border border-gray-800 shadow"></canvas>
+                <div class="absolute top-2 left-2 bg-black/60 text-[10px] text-cyan-400 px-2 py-1 rounded">雷達採樣點追蹤</div>
             </div>
         </div>
 
         <div class="panel lg:col-span-2 flex flex-col">
-            <h2 class="text-xl font-bold mb-4">實體導光條漸層即時預覽 (數學對稱版)</h2>
+            <h2 class="text-xl font-bold mb-4">實體導光條漸層即時預覽 (遮罩流裁切版)</h2>
             
             <div class="dashboard-container mb-6" id="dashboard">
                 <div class="dashboard-bg"></div>
                 
-                <!-- HUD 戰情板 -->
-                <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-20">
-                    <div class="bg-black/85 p-3 rounded-lg border border-cyan-500/40 text-[10px] sm:text-xs text-cyan-300 grid grid-cols-2 md:grid-cols-4 gap-x-3 gap-y-1 backdrop-blur-md shadow-2xl" id="hvGrid">
+                <!-- HUD 戰情板 (現在包含 H/S/V) -->
+                <div class="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+                    <div class="bg-black/85 p-3 rounded-lg border border-cyan-500/40 text-[10px] text-cyan-300 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-x-2 gap-y-1 backdrop-blur-md shadow-2xl" id="hvGrid">
                         <div class="col-span-full text-center text-gray-500 mb-1">等待影像解析...</div>
                     </div>
                 </div>
@@ -108,7 +105,6 @@
                 <svg id="svgOverlay" viewBox="0 0 900 424" preserveAspectRatio="none"></svg>
             </div>
 
-            <!-- CAN Bus 輸出區 -->
             <div class="bg-black/50 p-4 rounded-lg border border-gray-800 flex-grow flex flex-col">
                 <div class="flex justify-between items-center mb-2">
                     <h3 class="text-cyan-400 font-bold font-mono">PCAN TX Payload (ID: 0x0AA)</h3>
@@ -127,27 +123,28 @@
         const algoSelect = document.getElementById('algoSelect');
         const dynamicParams = document.getElementById('dynamicParams');
         
-        let currentImageData = null;
+        let currentImage = null; // 儲存原始圖片物件
         let segmentElements = {}; 
 
+        // 完美吻合 1RB外框.png 開孔的 10 區塊幾何路徑 (使用 SVG 絕對座標)
         const SEGMENTS = [
-            // 上方 1 條 (I1-I2)
-            { id: 'I1_I2', nodes: ['I1', 'I2'], d: 'M 200 40 L 700 40' }, 
+            // 上方 1 條 (由 I1 漸層到 I2)
+            { id: 'I1_I2', nodes: ['I1', 'I2'], d: 'M 250 45 L 650 45' }, 
             
-            // 右方 3 條 (I3-I4, I5-I6, I7-I8)
-            { id: 'I3_I4', nodes: ['I3', 'I4'], d: 'M 720 45 Q 850 45 850 140' }, 
+            // 右方 3 條 (順時針)
+            { id: 'I3_I4', nodes: ['I3', 'I4'], d: 'M 670 45 Q 850 45 850 140' }, 
             { id: 'I5_I6', nodes: ['I5', 'I6'], d: 'M 855 160 L 855 264' },
-            { id: 'I7_I8', nodes: ['I7', 'I8'], d: 'M 850 284 Q 850 379 720 379' },
+            { id: 'I7_I8', nodes: ['I7', 'I8'], d: 'M 850 284 Q 850 379 670 379' },
             
-            // 下方 3 條 (J1-J2, J3-J4, J5-J6) - 方向為右至左
-            { id: 'J1_J2', nodes: ['J1', 'J2'], d: 'M 690 385 L 530 385' }, 
-            { id: 'J3_J4', nodes: ['J3', 'J4'], d: 'M 510 385 L 390 385' }, 
-            { id: 'J5_J6', nodes: ['J5', 'J6'], d: 'M 370 385 L 210 385' }, 
+            // 下方 3 條 (由右至左)
+            { id: 'J1_J2', nodes: ['J1', 'J2'], d: 'M 650 379 L 520 379' }, 
+            { id: 'J3_J4', nodes: ['J3', 'J4'], d: 'M 500 379 L 400 379' }, 
+            { id: 'J5_J6', nodes: ['J5', 'J6'], d: 'M 380 379 L 250 379' }, 
             
-            // 左方 3 條 (J7-J8, K1-K2, K3-K4) - 方向為下至上
-            { id: 'J7_J8', nodes: ['J7', 'J8'], d: 'M 180 379 Q 50 379 50 284' }, 
+            // 左方 3 條 (由下至上)
+            { id: 'J7_J8', nodes: ['J7', 'J8'], d: 'M 230 379 Q 50 379 50 284' }, 
             { id: 'K1_K2', nodes: ['K1', 'K2'], d: 'M 45 264 L 45 160' }, 
-            { id: 'K3_K4', nodes: ['K3', 'K4'], d: 'M 50 140 Q 50 45 180 45' }  
+            { id: 'K3_K4', nodes: ['K3', 'K4'], d: 'M 50 140 Q 50 45 230 45' }  
         ];
 
         const LED_SAMPLING_ANGLES = [
@@ -186,11 +183,11 @@
             };
 
             if (algo === 'polar') {
-                createSlider('radiusSlider', '射線採樣半徑 (%)', 10, 100, 1, PARAMS.radius, (v) => { PARAMS.radius = v; if(currentImageData) processImageColors(currentImageData); });
+                createSlider('radiusSlider', '射線採樣半徑 (%)', 10, 100, 1, PARAMS.radius, (v) => { PARAMS.radius = v; processImageColors(); });
             } else {
-                createSlider('marginSlider', '邊緣厚度 (Margin %)', 5, 50, 1, PARAMS.margin, (v) => { PARAMS.margin = v; if(currentImageData) processImageColors(currentImageData); });
+                createSlider('marginSlider', '邊緣厚度 (Margin %)', 5, 50, 1, PARAMS.margin, (v) => { PARAMS.margin = v; processImageColors(); });
                 if (algo === 'kmeans') {
-                    createSlider('kvalueSlider', '叢集萃取數量 (K)', 2, 5, 1, PARAMS.kvalue, (v) => { PARAMS.kvalue = parseInt(v); if(currentImageData) processImageColors(currentImageData); });
+                    createSlider('kvalueSlider', '叢集萃取數量 (K)', 2, 5, 1, PARAMS.kvalue, (v) => { PARAMS.kvalue = parseInt(v); processImageColors(); });
                 }
             }
         }
@@ -211,8 +208,7 @@
                 const gradId = `grad_${index}`;
                 const grad = document.createElementNS("http://www.w3.org/2000/svg", "linearGradient");
                 grad.setAttribute("id", gradId);
-                
-                grad.setAttribute("gradientUnits", "userSpaceOnUse"); 
+                grad.setAttribute("gradientUnits", "userSpaceOnUse"); // 解決水平線消失的 Bug
                 grad.setAttribute("x1", startX);
                 grad.setAttribute("y1", startY);
                 grad.setAttribute("x2", endX);
@@ -233,8 +229,8 @@
                 const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
                 path.setAttribute("d", seg.d);
                 path.setAttribute("stroke", `url(#${gradId})`);
-                path.setAttribute("stroke-width", "35"); // 加粗！保證能填滿外框遮罩的縫隙
-                path.setAttribute("stroke-linecap", "butt"); // 遮罩會處理圓角，這裡用平頭即可
+                path.setAttribute("stroke-width", "40"); // 加寬以填滿外框遮罩
+                path.setAttribute("stroke-linecap", "butt"); 
                 path.setAttribute("fill", "none");
 
                 svg.appendChild(path);
@@ -251,7 +247,6 @@
             return { h: 60 * (h < 0 ? h + 6 : h), s: v === 0 ? 0 : c / v * 100, v: v * 100 };
         }
 
-        // 空間像素分桶器
         function bucketEdgePixels(imageData) {
             const data = imageData.data, w = imageData.width, h = imageData.height;
             const cx = w / 2, cy = h / 2;
@@ -261,9 +256,12 @@
 
             for (let y = 0; y < h; y += 2) {
                 for (let x = 0; x < w; x += 2) {
-                    const dx = x - cx, dy = cy - y; 
+                    const dx = x - cx, dy = y - cy; // dy 向下為正 (Canvas 特性)
+                    
                     if ((dx*dx)/(innerRx*innerRx) + (dy*dy)/(innerRy*innerRy) > 1) {
-                        let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+                        // 修正角度計算: 0度在正上方(dx=0, dy=-R), 270度在正右方(dx=R, dy=0)
+                        // Math.atan2(y, x). 我們傳入 (-dx, -dy)
+                        let angle = Math.atan2(-dx, -dy) * 180 / Math.PI;
                         if (angle < 0) angle += 360;
                         
                         let minDiff = 360, bestIdx = 0;
@@ -274,16 +272,23 @@
                         });
                         
                         const idx = (y * w + x) * 4;
-                        buckets[bestIdx].push({ r: data[idx], g: data[idx+1], b: data[idx+2] });
+                        buckets[bestIdx].push({ r: data[idx], g: data[idx+1], b: data[idx+2], x: x, y: y });
                     }
                 }
             }
             return buckets;
         }
 
-        function processImageColors(imageData) {
+        function processImageColors() {
+            if (!currentImage) return;
+
+            // 1. 每次處理前，重繪原始圖片 (清除上一筆的十字標記)
+            ctx.drawImage(currentImage, 0, 0, sourceCanvas.width, sourceCanvas.height);
+            const imageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+            
             const algo = algoSelect.value;
             let extractedColors = new Array(20).fill({r:0,g:0,b:0});
+            let samplingPoints = []; // 紀錄要畫在畫面上的點
 
             if (algo === 'polar') {
                 const w = imageData.width, h = imageData.height, data = imageData.data;
@@ -292,11 +297,14 @@
 
                 LED_SAMPLING_ANGLES.forEach((node, idx) => {
                     const rad = node.angle * Math.PI / 180;
-                    const px = Math.floor(cx + targetR * Math.cos(rad));
-                    const py = Math.floor(cy - targetR * Math.sin(rad)); 
+                    // 修正數學：0度正上方，270度正右方
+                    const px = Math.floor(cx - targetR * Math.sin(rad));
+                    const py = Math.floor(cy - targetR * Math.cos(rad)); 
+                    
                     if (px >= 0 && px < w && py >= 0 && py < h) {
                         const i = (py * w + px) * 4;
                         extractedColors[idx] = { r: data[i], g: data[i+1], b: data[i+2] };
+                        samplingPoints.push({x: px, y: py, label: node.id});
                     }
                 });
             } else {
@@ -306,6 +314,8 @@
                         if (b.length === 0) return;
                         let sum = b.reduce((acc, val) => { acc.r+=val.r; acc.g+=val.g; acc.b+=val.b; return acc; }, {r:0,g:0,b:0});
                         extractedColors[idx] = { r: sum.r/b.length, g: sum.g/b.length, b: sum.b/b.length };
+                        // 取該區塊的中心點畫標記
+                        if(b.length > 0) samplingPoints.push({x: b[Math.floor(b.length/2)].x, y: b[Math.floor(b.length/2)].y, label: LED_SAMPLING_ANGLES[idx].id});
                     });
                 } else if (algo === 'kmeans') {
                     buckets.forEach((b, idx) => {
@@ -314,15 +324,33 @@
                         let bestScore = -1, bestColor = samples[0];
                         samples.forEach(c => {
                             const hsv = rgbToHsv(c.r, c.g, c.b);
-                            const score = hsv.s * hsv.v; 
+                            const score = hsv.s * hsv.v; // Saturation 佔了極大的比重！
                             if (score > bestScore) { bestScore = score; bestColor = c; }
                         });
                         extractedColors[idx] = bestColor;
+                        samplingPoints.push({x: bestColor.x, y: bestColor.y, label: LED_SAMPLING_ANGLES[idx].id});
                     });
                 }
             }
 
+            drawSamplingCrosshairs(samplingPoints);
             renderSegmentsAndOutputCAN(extractedColors);
+        }
+
+        function drawSamplingCrosshairs(points) {
+            ctx.fillStyle = '#0ff';
+            ctx.font = '10px monospace';
+            points.forEach(pt => {
+                // 畫十字
+                ctx.beginPath();
+                ctx.moveTo(pt.x - 4, pt.y); ctx.lineTo(pt.x + 4, pt.y);
+                ctx.moveTo(pt.x, pt.y - 4); ctx.lineTo(pt.x, pt.y + 4);
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.8)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+                // 畫文字
+                ctx.fillText(pt.label, pt.x + 5, pt.y + 5);
+            });
         }
 
         function renderSegmentsAndOutputCAN(colorsArray) {
@@ -347,11 +375,13 @@
                 const byte1 = (((hueInt >> 8) & 0x01) << 7) | (valInt & 0x7F);
                 payloadData.push(byte0, byte1);
 
-                hvHtml += `<div class="flex justify-between items-center bg-gray-900/90 px-1.5 py-0.5 rounded border border-gray-700/50">
-                            <span class="text-gray-400 font-bold w-5">${node.id}</span> 
-                            <span class="font-mono text-[11px]">
-                                <span class="text-purple-400">H</span>${hueInt.toString().padStart(3,'0')} 
-                                <span class="text-yellow-400">V</span>${valInt.toString().padStart(3,'0')}
+                // HUD 戰情板更新 (現在加入 S 飽和度顯示)
+                hvHtml += `<div class="flex justify-between items-center bg-gray-900/90 px-1 py-0.5 rounded border border-gray-700/50">
+                            <span class="text-gray-400 font-bold w-4">${node.id}</span> 
+                            <span class="font-mono text-[10px] flex gap-1">
+                                <span><span class="text-purple-400">H</span>${hueInt.toString().padStart(3,'0')}</span>
+                                <span><span class="text-blue-400">S</span>${Math.floor(hsv.s).toString().padStart(3,'0')}</span>
+                                <span><span class="text-yellow-400">V</span>${valInt.toString().padStart(3,'0')}</span>
                             </span>
                            </div>`;
             });
@@ -369,11 +399,11 @@
 
         algoSelect.addEventListener('change', () => {
             buildParamUI();
-            if (currentImageData) processImageColors(currentImageData);
+            processImageColors();
         });
 
         brightnessSlider.addEventListener('input', () => {
-            if (currentImageData) processImageColors(currentImageData);
+            processImageColors();
         });
 
         document.getElementById('copyBtn').addEventListener('click', () => {
@@ -394,16 +424,14 @@
             if (e.target.files && e.target.files[0]) {
                 const reader = new FileReader();
                 reader.onload = (ev) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const scale = Math.min(400 / img.width, 300 / img.height);
-                        sourceCanvas.width = img.width * scale;
-                        sourceCanvas.height = img.height * scale;
-                        ctx.drawImage(img, 0, 0, sourceCanvas.width, sourceCanvas.height);
-                        currentImageData = ctx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
-                        processImageColors(currentImageData);
+                    currentImage = new Image();
+                    currentImage.onload = () => {
+                        const scale = Math.min(400 / currentImage.width, 300 / currentImage.height);
+                        sourceCanvas.width = currentImage.width * scale;
+                        sourceCanvas.height = currentImage.height * scale;
+                        processImageColors();
                     };
-                    img.src = ev.target.result;
+                    currentImage.src = ev.target.result;
                 };
                 reader.readAsDataURL(e.target.files[0]);
             }
