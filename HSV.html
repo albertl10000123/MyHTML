@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>進階色彩空間與普朗克軌跡轉換工具</title>
+    <title>進階色彩空間與 RGBW 模擬器</title>
     <style>
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -11,7 +11,7 @@
             color: #1d1d1f;
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: flex-start;
             min-height: 100vh;
             margin: 0;
             padding: 20px;
@@ -22,71 +22,89 @@
             border-radius: 12px;
             box-shadow: 0 4px 20px rgba(0,0,0,0.08);
             width: 100%;
-            max-width: 600px;
+            max-width: 650px;
         }
-        h2 {
-            text-align: center;
-            margin-top: 0;
-            color: #333;
-        }
-        .preview-box {
-            width: 100%;
-            height: 80px;
-            border-radius: 8px;
-            border: 1px solid #ddd;
-            margin-bottom: 20px;
-            transition: background-color 0.1s;
-        }
-        .section {
-            border: 1px solid #e5e5e7;
-            padding: 15px;
-            border-radius: 8px;
-            margin-bottom: 15px;
-            background-color: #fafafa;
-        }
-        .section-title {
-            font-weight: bold;
-            margin-bottom: 10px;
-            color: #0071e3;
-            display: flex;
-            justify-content: space-between;
-        }
-        .input-group {
-            display: flex;
-            align-items: center;
-            margin-bottom: 10px;
-        }
-        .input-group:last-child {
-            margin-bottom: 0;
-        }
-        label {
-            width: 45px;
-            font-weight: 500;
-        }
-        input[type="number"] {
-            width: 80px;
-            padding: 6px;
-            border: 1px solid #ccc;
-            border-radius: 4px;
-            margin-right: 10px;
-            font-family: monospace;
-        }
-        input[type="range"] {
-            flex: 1;
-        }
-        .info-text {
-            font-size: 0.9rem;
-            color: #666;
-            margin-top: 8px;
-        }
+        h2 { text-align: center; margin-top: 0; color: #333; }
+        
+        /* --- 預覽區塊樣式 --- */
+        .comparison-container { display: flex; gap: 10px; margin-bottom: 20px; }
+        .preview-box-wrapper { flex: 1; display: flex; flex-direction: column; align-items: center; }
+        .preview-box { width: 100%; height: 60px; border-radius: 8px; border: 1px solid #ddd; transition: background-color 0.1s; margin-bottom: 5px;}
+        .preview-label { font-size: 0.75rem; font-weight: bold; color: #555; text-align: center; height: auto; min-height: 45px; }
+        
+        /* --- 通用區塊樣式 --- */
+        .section { border: 1px solid #e5e5e7; padding: 15px; border-radius: 8px; margin-bottom: 15px; background-color: #fafafa; }
+        .section-title { font-weight: bold; margin-bottom: 15px; color: #0071e3; display: flex; justify-content: space-between; }
+        .input-group { display: flex; align-items: center; margin-bottom: 10px; }
+        .input-group:last-child { margin-bottom: 0; }
+        label { width: 50px; font-weight: 500; }
+        input[type="number"], input[type="text"] { width: 80px; padding: 6px; border: 1px solid #ccc; border-radius: 4px; margin-right: 10px; font-family: monospace; }
+        input[type="range"] { flex: 1; }
+        .fw-input { width: 100% !important; max-width: 250px; background: #e8f0fe; border-color: #a0c1f9; color: #1a73e8; font-weight: bold; }
+        .info-text { font-size: 0.9rem; color: #666; margin-top: 8px; }
+        
+        /* --- HSV 專用樣式 --- */
+        .hsv-layout { display: flex; align-items: center; gap: 20px; }
+        .color-wheel-wrapper { position: relative; width: 120px; height: 120px; flex-shrink: 0; }
+        .color-wheel { width: 100%; height: 100%; border-radius: 50%; background: conic-gradient(from 90deg, #f00 0deg, #ff0 60deg, #0f0 120deg, #0ff 180deg, #00f 240deg, #f0f 300deg, #f00 360deg); cursor: crosshair; box-shadow: 0 4px 10px rgba(0,0,0,0.15); touch-action: none; }
+        .hue-marker { width: 14px; height: 14px; border: 2.5px solid white; border-radius: 50%; background-color: transparent; position: absolute; transform: translate(-50%, -50%); box-shadow: 0 0 4px rgba(0,0,0,0.6), inset 0 0 2px rgba(0,0,0,0.3); pointer-events: none; }
+        .hsv-controls { flex: 1; display: flex; flex-direction: column; }
+        .hv-fw-container { display: flex; gap: 15px; margin-top: 15px; padding-top: 15px; border-top: 1px dashed #ccc; }
+        .hv-fw-item { display: flex; align-items: center; font-size: 0.85rem; color: #555; font-weight: 600; }
+        .hv-fw-item input { width: 55px; padding: 4px; margin-left: 5px; margin-right: 0; font-size: 0.85rem; border: 1px solid #bbb; }
+        .hv-fw-item input.hex { color: #d93025; background-color: #fce8e6; margin-right: 5px; }
+        .hv-fw-item input.dec { color: #1a73e8; background-color: #e8f0fe; }
+
+        /* --- RGBW 工程模擬器樣式 --- */
+        .rgbw-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        .rgbw-card { background: #fff; border: 1px solid #ddd; border-radius: 6px; padding: 10px 5px; text-align: center; display: flex; flex-direction: column; align-items: center; }
+        .rgbw-card label { width: 100%; font-weight: bold; margin-bottom: 5px; color: #333; }
+        .rgbw-value { font-size: 1.3rem; font-weight: bold; margin-bottom: 2px; }
+        .gamma-value { font-size: 0.85rem; color: #777; font-weight: 600; margin-bottom: 8px; background: #f0f0f0; padding: 2px 8px; border-radius: 12px; }
+        .weight-group { display: flex; align-items: center; font-size: 0.75rem; color: #555; }
+        .weight-group input { width: 45px; padding: 3px; font-size: 0.75rem; margin-right: 0; margin-left: 5px; text-align: center; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h2>色彩空間與普朗克軌跡轉換工具</h2>
+    <h2>色彩空間與 RGBW 模擬器</h2>
     
-    <div class="preview-box" id="preview"></div>
+    <!-- 預覽區塊 -->
+    <div class="comparison-container">
+        <div class="preview-box-wrapper">
+            <div class="preview-box" id="preview-linear"></div>
+            <div class="preview-label" id="label-linear">Linear RGB<br>(理想設計值)</div>
+        </div>
+        <div class="preview-box-wrapper">
+            <div class="preview-box" id="preview-mixed"></div>
+            <div class="preview-label" id="label-mixed">RGBW 混色模擬<br>(Raw 物理發光)</div>
+        </div>
+        <div class="preview-box-wrapper">
+            <div class="preview-box" id="preview-mixed-gamma" style="border: 2px solid #d93025;"></div>
+            <div class="preview-label" id="label-mixed-gamma" style="color: #d93025;">RGBW 混色 + Gamma 2.2<br>(人眼視覺效果)</div>
+        </div>
+    </div>
+
+    <!-- 韌體工程編碼區塊 -->
+    <div class="section">
+        <div class="section-title">韌體工程編碼 (24-bit Color Codes)</div>
+        <div class="input-group">
+            <label>HEX</label>
+            <input type="text" id="in-hex" class="fw-input" value="#FFFFFF" placeholder="#RRGGBB">
+            <span class="info-text" style="margin:0 0 0 10px;">十六進位</span>
+        </div>
+        <div class="input-group">
+            <label>DEC</label>
+            <input type="number" id="in-dec" class="fw-input" value="16777215" placeholder="0 ~ 16777215">
+            <span class="info-text" style="margin:0 0 0 10px;">十進位</span>
+        </div>
+        <div class="input-group">
+            <label>BIN</label>
+            <input type="text" id="in-bin" class="fw-input" value="11111111 11111111 11111111" style="font-size: 0.9rem;">
+            <span class="info-text" style="margin:0 0 0 10px;">二進位</span>
+        </div>
+    </div>
 
     <!-- RGB 區塊 -->
     <div class="section">
@@ -98,33 +116,45 @@
         </div>
         <div class="input-group">
             <label>G</label>
-            <input type="number" id="in-G" min="0" max="255" value="255">
-            <input type="range" id="sl-G" min="0" max="255" value="255">
+            <input type="number" id="in-G" min="0" max="255" value="112">
+            <input type="range" id="sl-G" min="0" max="255" value="112">
         </div>
         <div class="input-group">
             <label>B</label>
-            <input type="number" id="in-B" min="0" max="255" value="255">
-            <input type="range" id="sl-B" min="0" max="255" value="255">
+            <input type="number" id="in-B" min="0" max="255" value="112">
+            <input type="range" id="sl-B" min="0" max="255" value="112">
         </div>
     </div>
 
     <!-- HSV 區塊 -->
     <div class="section">
-        <div class="section-title">HSV (直覺色彩)</div>
-        <div class="input-group">
-            <label>H °</label>
-            <input type="number" id="in-H" min="0" max="360" value="0">
-            <input type="range" id="sl-H" min="0" max="360" value="0">
-        </div>
-        <div class="input-group">
-            <label>S %</label>
-            <input type="number" id="in-S" min="0" max="100" value="0">
-            <input type="range" id="sl-S" min="0" max="100" value="0">
-        </div>
-        <div class="input-group">
-            <label>V %</label>
-            <input type="number" id="in-V" min="0" max="100" value="100">
-            <input type="range" id="sl-V" min="0" max="100" value="100">
+        <div class="section-title">HSV (直覺色彩) & 參數轉換</div>
+        <div class="hsv-layout">
+            <div class="color-wheel-wrapper">
+                <div id="color-wheel" class="color-wheel"></div>
+                <div id="hue-marker" class="hue-marker"></div>
+            </div>
+            <div class="hsv-controls">
+                <div class="input-group">
+                    <label>H °</label>
+                    <input type="number" id="in-H" min="0" max="360" value="360">
+                    <input type="range" id="sl-H" min="0" max="360" value="360">
+                </div>
+                <div class="input-group">
+                    <label>S %</label>
+                    <input type="number" id="in-S" min="0" max="100" value="56">
+                    <input type="range" id="sl-S" min="0" max="100" value="56">
+                </div>
+                <div class="input-group">
+                    <label>V %</label>
+                    <input type="number" id="in-V" min="0" max="100" value="100">
+                    <input type="range" id="sl-V" min="0" max="100" value="100">
+                </div>
+                <div class="hv-fw-container">
+                    <div class="hv-fw-item">H: <input type="text" id="fw-h-hex" class="hex"><input type="number" id="fw-h-dec" class="dec"></div>
+                    <div class="hv-fw-item">V: <input type="text" id="fw-v-hex" class="hex"><input type="number" id="fw-v-dec" class="dec"></div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -153,6 +183,39 @@
             <input type="range" id="sl-T" min="1000" max="15000" step="50" value="6500">
         </div>
         <div class="info-text">單位: 絕對溫度 Kelvin (K)。範圍: 1000K (紅) ~ 15000K (藍白)。</div>
+    </div>
+
+    <!-- RGBW 模擬器區 -->
+    <div class="section" style="border-color: #d93025; background-color: #fffaf9;">
+        <div class="section-title" style="color: #d93025;">RGBW 工程模擬 (Extract-Min & Gamma)</div>
+        <div class="info-text" style="margin-top: -10px; margin-bottom: 10px;">包含光學衰減權重 (K)、白光提取演算法與 Gamma 2.2 查表模擬。</div>
+        
+        <div class="rgbw-grid">
+            <div class="rgbw-card">
+                <label style="color: #d93025;">R_out</label>
+                <div class="rgbw-value" style="color: #d93025;" id="out-r" title="演算法輸出的線性數值">0</div>
+                <div class="gamma-value" title="過 Gamma 表後實際打給 IC 的 PWM 佔空比">γ PWM: <span id="out-r-gamma">0</span></div>
+                <div class="weight-group">Kr: <input type="number" id="w-r" value="1.0" step="0.05"></div>
+            </div>
+            <div class="rgbw-card">
+                <label style="color: #0f9d58;">G_out</label>
+                <div class="rgbw-value" style="color: #0f9d58;" id="out-g">0</div>
+                <div class="gamma-value">γ PWM: <span id="out-g-gamma">0</span></div>
+                <div class="weight-group">Kg: <input type="number" id="w-g" value="0.95" step="0.05"></div>
+            </div>
+            <div class="rgbw-card">
+                <label style="color: #4285f4;">B_out</label>
+                <div class="rgbw-value" style="color: #4285f4;" id="out-b">0</div>
+                <div class="gamma-value">γ PWM: <span id="out-b-gamma">0</span></div>
+                <div class="weight-group">Kb: <input type="number" id="w-b" value="1.35" step="0.05"></div>
+            </div>
+            <div class="rgbw-card">
+                <label style="color: #555;">W_out</label>
+                <div class="rgbw-value" style="color: #555;" id="out-w">0</div>
+                <div class="gamma-value">γ PWM: <span id="out-w-gamma">0</span></div>
+                <div class="weight-group">Kw: <input type="number" id="w-w" value="0.45" step="0.05"></div>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -196,166 +259,224 @@ function hsvToRgb(h, s, v) {
 }
 
 // --- 核心演算法：RGB ↔ CIE 1931 XYZ / xy ---
-// sRGB 伽馬反轉 (Linearize)
-function srgbInverseGamma(x) {
-    x /= 255;
-    return x <= 0.04045 ? x / 12.92 : Math.pow((x + 0.055) / 1.055, 2.4);
-}
-// sRGB 伽馬校正 (Compand)
-function srgbGamma(x) {
-    return x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1/2.4) - 0.055;
-}
-
 function rgbToXy(r, g, b) {
-    let R = srgbInverseGamma(r);
-    let G = srgbInverseGamma(g);
-    let B = srgbInverseGamma(b);
-    // sRGB 轉 XYZ 矩陣 (D65 白點)
+    let R = r/255 <= 0.04045 ? (r/255) / 12.92 : Math.pow(((r/255) + 0.055) / 1.055, 2.4);
+    let G = g/255 <= 0.04045 ? (g/255) / 12.92 : Math.pow(((g/255) + 0.055) / 1.055, 2.4);
+    let B = b/255 <= 0.04045 ? (b/255) / 12.92 : Math.pow(((b/255) + 0.055) / 1.055, 2.4);
     let X = R * 0.4124 + G * 0.3576 + B * 0.1805;
     let Y = R * 0.2126 + G * 0.7152 + B * 0.0722;
     let Z = R * 0.0193 + G * 0.1192 + B * 0.9505;
     let sum = X + Y + Z;
-    if (sum === 0) return { x: 0.3127, y: 0.3290 }; // 預設白點
+    if (sum === 0) return { x: 0.3127, y: 0.3290 };
     return { x: X / sum, y: Y / sum };
 }
 
 function xyToRgb(x, y) {
     if (y === 0) y = 0.00001;
-    let Y = 1.0; // 固定亮度為最大值進行色調投影
+    let Y = 1.0; 
     let X = (x * Y) / y;
     let Z = ((1 - x - y) * Y) / y;
-    // XYZ 轉 sRGB 矩陣
     let R = X * 3.2406 + Y * -1.5372 + Z * -0.4986;
     let G = X * -0.9689 + Y * 1.8758 + Z * 0.0415;
     let B = X * 0.0557 + Y * -0.2040 + Z * 1.0570;
-    // 裁剪極端值並進行伽馬校正
-    let r = Math.min(255, Math.max(0, Math.round(srgbGamma(R) * 255)));
-    let g = Math.min(255, Math.max(0, Math.round(srgbGamma(G) * 255)));
-    let b = Math.min(255, Math.max(0, Math.round(srgbGamma(B) * 255)));
+    
+    let gR = R <= 0.0031308 ? 12.92 * R : 1.055 * Math.pow(R, 1/2.4) - 0.055;
+    let gG = G <= 0.0031308 ? 12.92 * G : 1.055 * Math.pow(G, 1/2.4) - 0.055;
+    let gB = B <= 0.0031308 ? 12.92 * B : 1.055 * Math.pow(B, 1/2.4) - 0.055;
+
+    let r = Math.min(255, Math.max(0, Math.round(gR * 255)));
+    let g = Math.min(255, Math.max(0, Math.round(gG * 255)));
+    let b = Math.min(255, Math.max(0, Math.round(gB * 255)));
     return { r, g, b };
 }
 
-// --- McCamy 公式：由 xy 座標反算色溫 CCT ---
 function xyToCCT(x, y) {
     let n = (x - 0.3320) / (y - 0.1858);
     let cct = -449 * Math.pow(n, 3) + 3525 * Math.pow(n, 2) - 6823.3 * n + 5520.33;
     return cct > 0 && cct < 30000 ? Math.round(cct) : "超出計算範圍";
 }
 
-// --- 普朗克軌跡：由色溫 CCT 正算 CIE xy (Kang 近似公式修復版) ---
 function cctToXy(T) {
     let x = 0.3127, y = 0.3290;
-    // 防呆保護
-    if(T < 1667) T = 1667;
-    if(T > 25000) T = 25000;
-
-    // 計算 x 座標
+    if(T < 1667) T = 1667; if(T > 25000) T = 25000;
     if (T >= 1667 && T <= 4000) {
         x = -0.2661239 * (Math.pow(10, 9) / Math.pow(T, 3)) - 0.2343580 * (Math.pow(10, 6) / Math.pow(T, 2)) + 0.877380 * (1000 / T) + 0.179910;
     } else if (T > 4000 && T <= 25000) {
         x = -3.0258469 * (Math.pow(10, 9) / Math.pow(T, 3)) + 2.1070379 * (Math.pow(10, 6) / Math.pow(T, 2)) + 0.222634 * (1000 / T) + 0.240390;
     }
-    
-    // 依據軌跡求出 y 座標
     if (T >= 1667 && T <= 2222) {
         y = -1.1063814 * Math.pow(x, 3) - 1.34811020 * Math.pow(x, 2) + 2.185558 * x - 0.202196;
     } else if (T > 2222 && T <= 4000) {
         y = -0.9549476 * Math.pow(x, 3) - 1.37418593 * Math.pow(x, 2) + 2.091370 * x - 0.167488;
     } else {
-        // 工程師補充：CCT > 4000K 時的 Y 座標對應公式
         y = 3.0817580 * Math.pow(x, 3) - 5.87338670 * Math.pow(x, 2) + 3.75112997 * x - 0.37001483;
     }
     return { x: parseFloat(x.toFixed(4)), y: parseFloat(y.toFixed(4)) };
 }
 
-// --- DOM 控制與界面聯動 ---
+// --- STREAMING_CHUNK:Implementing RGBW specific logic & DOM bindings... ---
 const doms = ['R','G','B','H','S','V','cX','cY','T'];
 const el = {};
-doms.forEach(id => {
-    el[`in_${id}`] = document.getElementById(`in-${id}`);
-    el[`sl_${id}`] = document.getElementById(`sl-${id}`);
-});
-const preview = document.getElementById('preview');
-const txtCCT = document.getElementById('mccamy-cct');
+doms.forEach(id => { el[`in_${id}`] = document.getElementById(`in-${id}`); el[`sl_${id}`] = document.getElementById(`sl-${id}`); });
 
-function syncInputs(id, val) {
-    el[`in_${id}`].value = val;
-    el[`sl_${id}`].value = val;
+const inHex = document.getElementById('in-hex'), inDec = document.getElementById('in-dec'), inBin = document.getElementById('in-bin');
+const fwHHex = document.getElementById('fw-h-hex'), fwHDec = document.getElementById('fw-h-dec');
+const fwVHex = document.getElementById('fw-v-hex'), fwVDec = document.getElementById('fw-v-dec');
+const colorWheel = document.getElementById('color-wheel'), hueMarker = document.getElementById('hue-marker');
+const weightInputs = { R: document.getElementById('w-r'), G: document.getElementById('w-g'), B: document.getElementById('w-b'), W: document.getElementById('w-w') };
+
+function syncInputs(id, val) { el[`in_${id}`].value = val; el[`sl_${id}`].value = val; }
+
+// Gamma 2.2 LUT 轉換函數
+function applyGamma22(val) {
+    if (val <= 0) return 0;
+    if (val >= 255) return 255;
+    return Math.round(255 * Math.pow(val / 255, 2.2));
 }
 
-// 核心 UI 更新函數
+// 計算並更新 RGBW 工程模擬區塊
+function calculateRGBW(r, g, b) {
+    // Tuning K: 軟體介面上的工程權重
+    let kr = parseFloat(weightInputs.R.value) || 1.0;
+    let kg = parseFloat(weightInputs.G.value) || 0.95;
+    let kb = parseFloat(weightInputs.B.value) || 1.35;
+    let kw = parseFloat(weightInputs.W.value) || 0.45;
+    
+    // 1. Extract Min 演算法 (物理亮度/線性)
+    let min = Math.min(r, g, b);
+    let r_out = Math.min(255, Math.max(0, Math.round((r - min) * kr)));
+    let g_out = Math.min(255, Math.max(0, Math.round((g - min) * kg)));
+    let b_out = Math.min(255, Math.max(0, Math.round((b - min) * kb)));
+    let w_out = Math.min(255, Math.max(0, Math.round(min * kw)));
+    
+    // 顯示 Raw Linear 數值
+    document.getElementById('out-r').innerText = r_out; document.getElementById('out-g').innerText = g_out;
+    document.getElementById('out-b').innerText = b_out; document.getElementById('out-w').innerText = w_out;
+
+    // 2. 套用總亮度 Gamma 轉換 (恆定色相策略)
+    // 以 RGB 最大值作為整體亮度 (V)，求出 Gamma 壓縮比例
+    let max_val = Math.max(r, g, b);
+    let gamma_ratio = max_val > 0 ? applyGamma22(max_val) / max_val : 0;
+
+    // 將線性 PWM 乘上統一的 Gamma 比例，確保色彩比例不偏移
+    let r_gamma = Math.round(r_out * gamma_ratio);
+    let g_gamma = Math.round(g_out * gamma_ratio);
+    let b_gamma = Math.round(b_out * gamma_ratio);
+    let w_gamma = Math.round(w_out * gamma_ratio);
+    
+    document.getElementById('out-r-gamma').innerText = r_gamma; document.getElementById('out-g-gamma').innerText = g_gamma;
+    document.getElementById('out-b-gamma').innerText = b_gamma; document.getElementById('out-w-gamma').innerText = w_gamma;
+
+    // 3. 渲染預覽視窗與下方資訊標籤
+    // [預覽 1] Linear RGB (UI 理想設計值)
+    document.getElementById('preview-linear').style.backgroundColor = `rgb(${r},${g},${b})`;
+    document.getElementById('label-linear').innerHTML = `Linear RGB<br>(理想設計值)<br><span style="font-family: monospace; font-size: 0.75rem; color:#0071e3;">R:${r} G:${g} B:${b}</span>`;
+    
+    // [預覽 2] RGBW 混色模擬 (Raw 物理發光，脫鉤 Hardware Baseline)
+    let w_true = w_out / kw;
+    let sim_r = Math.min(255, Math.round((r_out / kr) + w_true));
+    let sim_g = Math.min(255, Math.round((g_out / kg) + w_true));
+    let sim_b = Math.min(255, Math.round((b_out / kb) + w_true));
+    
+    document.getElementById('preview-mixed').style.backgroundColor = `rgb(${sim_r},${sim_g},${sim_b})`;
+    document.getElementById('label-mixed').innerHTML = `RGBW 混色模擬<br>(Raw 物理發光)<br><span style="font-family: monospace; font-size: 0.75rem; color:#333;">合成 RGB -> R:${sim_r} G:${sim_g} B:${sim_b}</span>`;
+
+    // [預覽 3] RGBW 混色 + Gamma 2.2 (人眼視覺效果)
+    // 將等比例壓縮後的 γ PWM 還原成物理光子，計算最終合成 sRGB
+    let w_gamma_true = w_gamma / kw;
+    let sim_gamma_r = Math.min(255, Math.round((r_gamma / kr) + w_gamma_true));
+    let sim_gamma_g = Math.min(255, Math.round((g_gamma / kg) + w_gamma_true));
+    let sim_gamma_b = Math.min(255, Math.round((b_gamma / kb) + w_gamma_true));
+
+    document.getElementById('preview-mixed-gamma').style.backgroundColor = `rgb(${sim_gamma_r},${sim_gamma_g},${sim_gamma_b})`;
+    document.getElementById('label-mixed-gamma').innerHTML = `RGBW 混色 + Gamma 2.2<br>(人眼視覺效果)<br><span style="font-family: monospace; font-size: 0.75rem; color:#d93025;">合成 RGB -> R:${sim_gamma_r} G:${sim_gamma_g} B:${sim_gamma_b}</span>`;
+}
+
+// --- STREAMING_CHUNK:Attaching user interaction events... ---
 function updateUI(r, g, b, h, s, v, cx, cy, t) {
     syncInputs('R', r); syncInputs('G', g); syncInputs('B', b);
     syncInputs('H', h); syncInputs('S', s); syncInputs('V', v);
     syncInputs('cX', cx.toFixed(4)); syncInputs('cY', cy.toFixed(4));
     if(t) syncInputs('T', t);
     
-    preview.style.backgroundColor = `rgb(${r},${g},${b})`;
     let calculatedCCT = xyToCCT(cx, cy);
-    txtCCT.innerText = `估算相關色溫 (CCT): ${calculatedCCT} ${calculatedCCT !== "超出計算範圍" ? "K" : ""}`;
+    document.getElementById('mccamy-cct').innerText = `估算相關色溫 (CCT): ${calculatedCCT} ${calculatedCCT !== "超出計算範圍" ? "K" : ""}`;
+
+    // 更新編碼
+    let rHex = r.toString(16).padStart(2, '0').toUpperCase(), gHex = g.toString(16).padStart(2, '0').toUpperCase(), bHex = b.toString(16).padStart(2, '0').toUpperCase();
+    inHex.value = `#${rHex}${gHex}${bHex}`;
+    inDec.value = ((r << 16) | (g << 8) | b) >>> 0;
+    inBin.value = `${r.toString(2).padStart(8, '0')} ${g.toString(2).padStart(8, '0')} ${b.toString(2).padStart(8, '0')}`;
+
+    fwHHex.value = '0x' + h.toString(16).toUpperCase().padStart(2, '0'); fwHDec.value = h;
+    fwVHex.value = '0x' + v.toString(16).toUpperCase().padStart(2, '0'); fwVDec.value = v;
+
+    let rad = h * Math.PI / 180;
+    hueMarker.style.left = `${60 + 46 * Math.cos(rad)}px`;
+    hueMarker.style.top = `${60 + 46 * Math.sin(rad)}px`;
+
+    // 觸發 RGBW 模擬計算
+    calculateRGBW(r, g, b);
 }
 
-// --- 事件處理函式 ---
-
-// 1. RGB 改變時觸發
-function onRgbChange() {
-    let r = parseInt(el.in_R.value), g = parseInt(el.in_G.value), b = parseInt(el.in_B.value);
-    let hsv = rgbToHsv(r, g, b);
-    let xy = rgbToXy(r, g, b);
+function triggerRgbUpdate(r, g, b) {
+    let hsv = rgbToHsv(r, g, b), xy = rgbToXy(r, g, b);
     updateUI(r, g, b, hsv.h, hsv.s, hsv.v, xy.x, xy.y, null);
 }
 
-// 2. HSV 改變時觸發
+function onRgbChange() { triggerRgbUpdate(parseInt(el.in_R.value), parseInt(el.in_G.value), parseInt(el.in_B.value)); }
 function onHsvChange() {
-    let h = parseInt(el.in_H.value), s = parseInt(el.in_S.value), v = parseInt(el.in_V.value);
-    let rgb = hsvToRgb(h, s, v);
-    let xy = rgbToXy(rgb.r, rgb.g, rgb.b);
-    updateUI(rgb.r, rgb.g, rgb.b, h, s, v, xy.x, xy.y, null);
+    let rgb = hsvToRgb(parseInt(el.in_H.value), parseInt(el.in_S.value), parseInt(el.in_V.value)), xy = rgbToXy(rgb.r, rgb.g, rgb.b);
+    updateUI(rgb.r, rgb.g, rgb.b, parseInt(el.in_H.value), parseInt(el.in_S.value), parseInt(el.in_V.value), xy.x, xy.y, null);
 }
-
-// 3. CIE xy 改變時觸發
 function onXyChange() {
-    let x = parseFloat(el.in_cX.value), y = parseFloat(el.in_cY.value);
-    let rgb = xyToRgb(x, y);
-    let hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    let x = parseFloat(el.in_cX.value), y = parseFloat(el.in_cY.value), rgb = xyToRgb(x, y), hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
     updateUI(rgb.r, rgb.g, rgb.b, hsv.h, hsv.s, hsv.v, x, y, null);
 }
-
-// 4. 色溫 (CCT) 改變時觸發
 function onCctChange() {
-    let t = parseInt(el.in_T.value);
-    let xy = cctToXy(t);
-    let rgb = xyToRgb(xy.x, xy.y);
-    let hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    let t = parseInt(el.in_T.value), xy = cctToXy(t), rgb = xyToRgb(xy.x, xy.y), hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
     updateUI(rgb.r, rgb.g, rgb.b, hsv.h, hsv.s, hsv.v, xy.x, xy.y, t);
 }
 
-// --- 綁定事件監聽器 ---
-function bindEvents() {
-    const bindGroup = (ids, callback) => {
-        ids.forEach(id => {
-            // 綁定輸入框
-            el[`in_${id}`].addEventListener('input', (e) => {
-                el[`sl_${id}`].value = e.target.value;
-                callback();
-            });
-            // 綁定拉桿
-            el[`sl_${id}`].addEventListener('input', (e) => {
-                el[`in_${id}`].value = e.target.value;
-                callback();
-            });
-        });
-    };
+inHex.addEventListener('change', e => {
+    let val = e.target.value.replace('#', '');
+    if(/^[0-9A-Fa-f]{6}$/.test(val)) triggerRgbUpdate(parseInt(val.substring(0,2), 16), parseInt(val.substring(2,4), 16), parseInt(val.substring(4,6), 16));
+});
+inDec.addEventListener('change', e => {
+    let val = parseInt(e.target.value);
+    if(val >= 0 && val <= 16777215) triggerRgbUpdate((val >> 16) & 255, (val >> 8) & 255, val & 255);
+});
+inBin.addEventListener('change', e => {
+    let val = e.target.value.replace(/\s/g, ''); 
+    if(/^[01]{24}$/.test(val)) { let dec = parseInt(val, 2); triggerRgbUpdate((dec >> 16) & 255, (dec >> 8) & 255, dec & 255); }
+});
 
-    bindGroup(['R', 'G', 'B'], onRgbChange);
-    bindGroup(['H', 'S', 'V'], onHsvChange);
-    bindGroup(['cX', 'cY'], onXyChange);
-    bindGroup(['T'], onCctChange);
+let isDraggingWheel = false;
+function handleWheelInteraction(e) {
+    let rect = colorWheel.getBoundingClientRect(), cx = rect.width / 2, cy = rect.height / 2;
+    let x = (e.clientX || e.touches[0].clientX) - rect.left - cx, y = (e.clientY || e.touches[0].clientY) - rect.top - cy;
+    let angle = Math.round(Math.atan2(y, x) * 180 / Math.PI);
+    if (angle < 0) angle += 360;
+    el.in_H.value = angle; el.sl_H.value = angle;
+    onHsvChange();
 }
+colorWheel.addEventListener('mousedown', (e) => { isDraggingWheel = true; handleWheelInteraction(e); });
+colorWheel.addEventListener('touchstart', (e) => { isDraggingWheel = true; handleWheelInteraction(e); }, {passive: true});
+window.addEventListener('mousemove', (e) => { if(isDraggingWheel) handleWheelInteraction(e); });
+window.addEventListener('touchmove', (e) => { if(isDraggingWheel) handleWheelInteraction(e); }, {passive: false});
+window.addEventListener('mouseup', () => { isDraggingWheel = false; });
+window.addEventListener('touchend', () => { isDraggingWheel = false; });
 
-// 啟動工具初始化
-bindEvents();
-onRgbChange(); // 載入時用 RGB (255,255,255) 觸發初始計算
+// 權重輸入連動 - 這裡改為只要有 input 事件，就重新抓取最新的 RGB 重新運算
+Object.values(weightInputs).forEach(input => input.addEventListener('input', () => calculateRGBW(parseInt(el.in_R.value), parseInt(el.in_G.value), parseInt(el.in_B.value))));
+
+const bindGroup = (ids, cb) => ids.forEach(id => {
+    el[`in_${id}`].addEventListener('input', e => { el[`sl_${id}`].value = e.target.value; cb(); });
+    el[`sl_${id}`].addEventListener('input', e => { el[`in_${id}`].value = e.target.value; cb(); });
+});
+bindGroup(['R', 'G', 'B'], onRgbChange); bindGroup(['H', 'S', 'V'], onHsvChange);
+bindGroup(['cX', 'cY'], onXyChange); bindGroup(['T'], onCctChange);
+onRgbChange();
 
 </script>
 </body>
