@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="zh-TW" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>eVTOL Industry Overview & Engineering Analysis</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50: '#f0f9ff',
+                            100: '#e0f2fe',
+                            500: '#0ea5e9',
+                            600: '#0284c7',
+                            900: '#0c4a6e',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 md:p-8">
+
+    <!-- Header Section -->
+    <header class="max-w-7xl mx-auto mb-8">
+        <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-800 pb-6">
+            <div>
+                <div class="flex items-center gap-3">
+                    <span class="p-2 bg-sky-500/10 text-sky-400 rounded-lg border border-sky-500/20">
+                        <i class="fa-solid fa-plane-up text-xl"></i>
+                    </span>
+                    <h1 class="text-2xl md:text-3xl font-bold tracking-tight text-white">MAJOR PLAYERS IN THE eVTOL INDUSTRY</h1>
+                </div>
+                <p class="text-slate-400 text-sm mt-1">Leading Companies Shaping the Future of Urban Air Mobility | Engineering Assessment Briefing</p>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="copyAllText()" class="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-lg border border-slate-700 transition flex items-center gap-2">
+                    <i class="fa-regular fa-copy"></i> 複製全文內容
+                </button>
+                <div class="px-3 py-1 bg-sky-950 text-sky-300 text-xs rounded-full border border-sky-800 font-mono">
+                    Updated: May 2024
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Architecture Types Overview -->
+    <section class="max-w-7xl mx-auto mb-10">
+        <h2 class="text-lg font-semibold text-slate-200 mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-diagram-project text-sky-400"></i> eVTOL 架構分流與第一性原理比較
+        </h2>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <!-- Multicopter -->
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-amber-500">
+                <div class="flex justify-between items-start mb-3">
+                    <h3 class="font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-helicopter text-amber-400"></i> Multicopter (多旋翼)
+                    </h3>
+                    <span class="text-xs bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded border border-amber-500/20">短途/高懸停</span>
+                </div>
+                <p class="text-xs text-slate-300 mb-3">多個旋翼提供起降與推進，無固定機翼升力。</p>
+                <div class="text-xs text-slate-400 space-y-1 bg-slate-900/60 p-3 rounded-lg font-mono">
+                    <div>• 能耗效率: <span class="text-red-400">低 (無翼面升力)</span></div>
+                    <div>• 系統複雜度: <span class="text-emerald-400">低 (控制機制簡潔)</span></div>
+                    <div>• 代表廠商: Volocopter, EHang, Wisk (早期)</div>
+                </div>
+            </div>
+
+            <!-- Lift + Cruise -->
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-sky-500">
+                <div class="flex justify-between items-start mb-3">
+                    <h3 class="font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-plane text-sky-400"></i> Lift + Cruise (升力與巡航)
+                    </h3>
+                    <span class="text-xs bg-sky-500/10 text-sky-300 px-2 py-0.5 rounded border border-sky-500/20">中長途/折衷型</span>
+                </div>
+                <p class="text-xs text-slate-300 mb-3">獨立垂直旋翼 + 獨立巡航推力槳，機翼巡航。</p>
+                <div class="text-xs text-slate-400 space-y-1 bg-slate-900/60 p-3 rounded-lg font-mono">
+                    <div>• 能耗效率: <span class="text-yellow-400">中高 (巡航有翼面升力)</span></div>
+                    <div>• 系統複雜度: <span class="text-yellow-400">中 (巡航時垂直槳死重)</span></div>
+                    <div>• 代表廠商: Vertical, Eve, AutoFlight, Beta, Wisk</div>
+                </div>
+            </div>
+
+            <!-- Tiltrotor / Vectored Thrust -->
+            <div class="glass-card rounded-xl p-5 border-l-4 border-l-emerald-500">
+                <div class="flex justify-between items-start mb-3">
+                    <h3 class="font-bold text-white flex items-center gap-2">
+                        <i class="fa-solid fa-arrows-spin text-emerald-400"></i> Tiltrotor / Vectored (傾轉/向量)
+                    </h3>
+                    <span class="text-xs bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded border border-emerald-500/20">長途/高效能</span>
+                </div>
+                <p class="text-xs text-slate-300 mb-3">旋翼/風扇可傾轉，兼顧垂直起降與前進推力。</p>
+                <div class="text-xs text-slate-400 space-y-1 bg-slate-900/60 p-3 rounded-lg font-mono">
+                    <div>• 能耗效率: <span class="text-emerald-400">極高 (無死重)</span></div>
+                    <div>• 系統複雜度: <span class="text-red-400">高 (關節/過渡態控制)</span></div>
+                    <div>• 代表廠商: Joby, Lilium, Archer</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Controls & Search -->
+    <section class="max-w-7xl mx-auto mb-6 flex flex-col md:flex-row justify-between items-center gap-4">
+        <div class="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <span class="text-xs text-slate-400 font-medium">篩選架構:</span>
+            <button onclick="filterType('all')" class="filter-btn active px-3 py-1.5 text-xs font-medium rounded-lg bg-sky-600 text-white transition">全部 (10)</button>
+            <button onclick="filterType('multicopter')" class="filter-btn px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Multicopter</button>
+            <button onclick="filterType('lift-cruise')" class="filter-btn px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Lift + Cruise</button>
+            <button onclick="filterType('tiltrotor')" class="filter-btn px-3 py-1.5 text-xs font-medium rounded-lg bg-slate-800 text-slate-300 hover:bg-slate-700 transition">Tiltrotor / Vectored</button>
+        </div>
+        <div class="relative w-full md:w-64">
+            <i class="fa-solid fa-magnifying-glass absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 text-xs"></i>
+            <input type="text" id="searchInput" onkeyup="searchCompanies()" placeholder="搜尋廠商、國家或規格..." class="w-full bg-slate-900 border border-slate-800 rounded-lg pl-9 pr-3 py-1.5 text-xs text-slate-200 focus:outline-none focus:border-sky-500 transition">
+        </div>
+    </section>
+
+    <!-- Major Players Grid -->
+    <main class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12" id="companyGrid">
+
+        <!-- 1. JOBY -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="tiltrotor" data-name="joby aviation usa tiltrotor">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">JOBY Aviation</h3>
+                            <span class="text-sm">🇺🇸</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Tiltrotor</span>
+                    </div>
+                    <a href="https://www.jobyaviation.com/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/d/d4/Joby_Aviation_S4_experimental_eVTOL_aircraft_at_Edwards_AFB.jpg/800px-Joby_Aviation_S4_experimental_eVTOL_aircraft_at_Edwards_AFB.jpg" 
+                         alt="JOBY S4" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/38bdf8?text=JOBY+S4+Tiltrotor';">
+                </div>
+                
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">5-seat pilot-optional</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~150 mi (241 km)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~200 mph (322 km/h)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">認證進度:</span> <span class="text-amber-300">FAA Type Cert in Progress</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-sky-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">六個傾轉旋翼設計。垂直起降與巡航態轉向控制極為複雜，但巡航階段幾無額外風阻死重，能量轉換效率最優。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 2. LILIUM -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="tiltrotor" data-name="lilium germany vectored thrust jet">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">LILIUM</h3>
+                            <span class="text-sm">🇩🇪</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/20">Vectored Thrust</span>
+                    </div>
+                    <a href="https://lilium.com/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c5/Lilium%2C_EBACE_2023%2C_Le_Grand-Saconnex_%28EB237483%29.jpg/800px-Lilium%2C_EBACE_2023%2C_Le_Grand-Saconnex_%28EB237483%29.jpg" 
+                         alt="LILIUM Jet" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/c084fc?text=LILIUM+Jet';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">7-seat jet-like eVTOL</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~250 km (155 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~280 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">營運時程:</span> <span class="text-amber-300">Crewed Ops 2026</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-purple-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">36個機翼嵌入式管道風扇。高盤面負荷 (Disk Loading) 導致垂直起降時熱能與電耗極高，但巡航速度與噪音表現優異。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 3. ARCHER -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="tiltrotor" data-name="archer aviation usa tiltrotor">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">ARCHER</h3>
+                            <span class="text-sm">🇺🇸</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">Tiltrotor</span>
+                    </div>
+                    <a href="https://www.archer.com/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://placehold.co/600x350/0f172a/34d399?text=ARCHER+Midnight" 
+                         alt="ARCHER Midnight" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/34d399?text=ARCHER+Midnight';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">4-seat piloted aircraft</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~100 km (60 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~240 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">認證進度:</span> <span class="text-amber-300">FAA Type Cert in Progress</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-sky-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">前排12個旋翼中前6個可傾轉，後6個固定。兼顧製造可可行性與能耗平衡，縮短工程驗證週期。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. VERTICAL -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="lift-cruise" data-name="vertical aerospace uk lift cruise">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">VERTICAL</h3>
+                            <span class="text-sm">🇬🇧</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">Lift + Cruise</span>
+                    </div>
+                    <a href="https://verticalaerospace.com/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://placehold.co/600x350/0f172a/0284c7?text=VERTICAL+VX4" 
+                         alt="VERTICAL VX4" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/0284c7?text=VERTICAL+VX4';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">5-seat piloted aircraft</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~185 km (115 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~240 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">認證進度:</span> <span class="text-amber-300">Certification Underway</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-sky-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">採用固定升力旋翼 + 推進槳。機械架構簡單，降低韌體與馬達控制極限狀態風險，但巡航風阻較高。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. EVE -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="lift-cruise" data-name="eve air mobility brazil embraer lift cruise">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">EVE Air Mobility</h3>
+                            <span class="text-sm">🇧🇷</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">Lift + Cruise</span>
+                    </div>
+                    <a href="https://eveairmobility.com/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://placehold.co/600x350/0f172a/0284c7?text=EVE+eVTOL" 
+                         alt="EVE eVTOL" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/0284c7?text=EVE+eVTOL';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">4-6 seat eVTOL</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~100 km (62 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~200 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">研發階段:</span> <span class="text-blue-300">Development in Progress</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-sky-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">Embraer背景。以高可靠度與商業可維護性為核心，放棄極端性能優化，換取最佳成本效益比。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. VOLOCOPTER -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="multicopter" data-name="volocopter germany multicopter volocity">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">VOLOCOPTER</h3>
+                            <span class="text-sm">🇩🇪</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Multicopter</span>
+                    </div>
+                    <a href="https://volocopter.com/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://placehold.co/600x350/0f172a/f59e0b?text=VOLOCOPTER+VoloCity" 
+                         alt="VoloCity" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/f59e0b?text=VOLOCOPTER+VoloCity';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">2-seat (VoloCity)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~35 km (22 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~110 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">認證進度:</span> <span class="text-amber-300">Certification Halted/Postponed</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-amber-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">18旋翼頂環架構。高冗餘極度安全，但欠缺空氣動力翼面升力，電池能量密度瓶頸對其航程限制極大。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 7. AUTOFLIGHT -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="lift-cruise" data-name="autoflight china lift cruise autonomous">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">AUTOFLIGHT</h3>
+                            <span class="text-sm">🇨🇳</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">Lift + Cruise</span>
+                    </div>
+                    <a href="https://www.autoflight.com/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://placehold.co/600x350/0f172a/0284c7?text=AUTOFLIGHT+Prosperity+I" 
+                         alt="AUTOFLIGHT Prosperity I" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/0284c7?text=AUTOFLIGHT+Prosperity+I';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">5-seat autonomous</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~250 km (155 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~200 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">測試階段:</span> <span class="text-emerald-300">First Flight Completed</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-sky-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">大型機翼+多垂直旋翼。著重於碳纖維複合材料輕量化，降低過渡飛行時的熱功率累積。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 8. EHANG -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="multicopter" data-name="ehang china multicopter autonomous ehang216">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">EHang (億航)</h3>
+                            <span class="text-sm">🇨🇳</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20">Multicopter</span>
+                    </div>
+                    <a href="https://www.ehang.com/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://placehold.co/600x350/0f172a/f59e0b?text=EHang+216-S" 
+                         alt="EHang 216-S" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/f59e0b?text=EHang+216-S';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">2-seat autonomous</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~30 km (19 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~130 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">營運狀態:</span> <span class="text-emerald-400 font-bold">Commercial Ops (CAAC TC)</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-amber-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">全球首個取得中國民航局TC證書的載人無人機。8臂16旋翼共軸雙槳，注重點對點精準低空接駁。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. BETA -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="lift-cruise" data-name="beta technologies usa lift cruise">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">BETA Technologies</h3>
+                            <span class="text-sm">🇺🇸</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">Lift + Cruise</span>
+                    </div>
+                    <a href="https://www.beta.team/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://placehold.co/600x350/0f172a/0284c7?text=BETA+ALIA-250" 
+                         alt="BETA ALIA-250" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/0284c7?text=BETA+ALIA-250';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">5-seat piloted aircraft</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~250 km (150 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~270 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">認證進度:</span> <span class="text-amber-300">FAA Certification in Progress</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-sky-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">同時研發急速充電網絡(MW級)。大翼展氣動效率高，且同時開發CTOL(固定翼純電)與VTOL雙版本以降低商業風險。</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- 10. WISK -->
+        <div class="company-card glass-card rounded-2xl p-6 relative flex flex-col justify-between hover:border-sky-500/50 transition duration-300" data-type="lift-cruise" data-name="wisk aero usa boeing lift cruise autonomous">
+            <div>
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-xl font-bold text-white">wisk</h3>
+                            <span class="text-sm">🇺🇸</span>
+                        </div>
+                        <span class="inline-block mt-1 text-[11px] font-mono px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20">Lift + Cruise</span>
+                    </div>
+                    <a href="https://wisk.aero/" target="_blank" class="text-slate-400 hover:text-sky-400 text-sm p-1"><i class="fa-solid fa-arrow-up-right-from-square"></i></a>
+                </div>
+
+                <div class="overflow-hidden rounded-xl mb-4 bg-slate-900 border border-slate-800 h-36 relative group">
+                    <img src="https://placehold.co/600x350/0f172a/0284c7?text=WISK+Generation+6" 
+                         alt="WISK Generation 6" 
+                         class="w-full h-full object-cover object-center group-hover:scale-105 transition duration-500"
+                         onerror="this.onerror=null; this.src='https://placehold.co/600x350/0f172a/0284c7?text=WISK+Generation+6';">
+                </div>
+
+                <div class="space-y-2 mb-4 text-xs font-mono bg-slate-900/80 p-3 rounded-xl border border-slate-800">
+                    <div class="flex justify-between"><span class="text-slate-400">座位數:</span> <span class="text-slate-200">2-4 seat autonomous</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">目標航程:</span> <span class="text-sky-400 font-bold">~40 km (25 mi)</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">最高時速:</span> <span class="text-emerald-400 font-bold">~120 km/h</span></div>
+                    <div class="flex justify-between"><span class="text-slate-400">認證進度:</span> <span class="text-amber-300">Testing & Cert in Progress</span></div>
+                </div>
+
+                <div class="text-xs text-slate-300 space-y-1 border-t border-slate-800/80 pt-3">
+                    <div class="font-semibold text-slate-200 mb-1"><i class="fa-solid fa-microchip text-sky-400"></i> 第一性原理分析:</div>
+                    <p class="text-slate-400 leading-relaxed">Boeing全資子公司。跳過有人駕駛直接直擊全自主飛行，其控制韌體與飛行控制算法要求為業界最高級別。</p>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <!-- Engineering Key Trade-off Table Section -->
+    <section class="max-w-7xl mx-auto glass-card rounded-2xl p-6 mb-12">
+        <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+            <i class="fa-solid fa-table-cells text-sky-400"></i> Key Challenges & Engineering Trade-offs Summary
+        </h2>
+        <div class="overflow-x-auto">
+            <table class="w-full text-xs text-left text-slate-300 font-mono">
+                <thead class="bg-slate-900 text-slate-400 border-b border-slate-800">
+                    <tr>
+                        <th class="p-3">關鍵挑戰維度</th>
+                        <th class="p-3">工程物理瓶頸</th>
+                        <th class="p-3">對馬達/控制器/電池之要求</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-slate-800">
+                    <tr>
+                        <td class="p-3 font-semibold text-sky-300">Battery Energy Density</td>
+                        <td class="p-3">重量 vs 續航力。垂直起降功率需求為巡航的 3~5 倍。</td>
+                        <td class="p-3">需要極高 Peak-to-Continuous 功率比的 Inverter，以及高 C-rate 放電電池。</td>
+                    </tr>
+                    <tr>
+                        <td class="p-3 font-semibold text-amber-300">Certification & Safety</td>
+                        <td class="p-3">單點失效 (Single Point of Failure) 零容忍。飛行控制系統須達到 10^-9 冗餘要求。</td>
+                        <td class="p-3">Dual-Inverter 雙重備援控制，獨立繞組 (Dual-three phase) 馬達架構。</td>
+                    </tr>
+                    <tr>
+                        <td class="p-3 font-semibold text-emerald-300">Infrastructure & Vertiports</td>
+                        <td class="p-3">城市電網負荷過大，缺乏 MW 級快速充電設備。</td>
+                        <td class="p-3">高壓平台 (800V+) 設計，熱管理系統 (TMS) 需要強化的水冷/油冷迴路。</td>
+                    </tr>
+                    <tr>
+                        <td class="p-3 font-semibold text-purple-300">Noise & Public Acceptance</td>
+                        <td class="p-3">旋翼尖端馬赫數過高引發劇烈渦流噪音。</td>
+                        <td class="p-3">需要高諧波抑制算法 (SVPWM/Dead-time compensation) 降低低頻電磁噪音與諧振。</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </section>
+
+    <!-- Plain Text Copy Modal / Area -->
+    <div id="copyModal" class="hidden fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-6 shadow-2xl flex flex-col max-h-[80vh]">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-md font-bold text-white"><i class="fa-regular fa-file-lines text-sky-400"></i> 純文字導出一覽 (已排版)</h3>
+                <button onclick="toggleModal(false)" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <textarea id="rawTextContent" readonly class="w-full flex-1 bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-xs text-slate-300 focus:outline-none resize-none mb-4"></textarea>
+            <div class="flex justify-end gap-3">
+                <button onclick="toggleModal(false)" class="px-4 py-2 bg-slate-800 text-slate-300 rounded-lg text-xs font-medium">關閉</button>
+                <button onclick="executeCopy()" class="px-4 py-2 bg-sky-600 text-white rounded-lg text-xs font-medium hover:bg-sky-500"><i class="fa-solid fa-copy"></i> 複製至剪貼簿</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Company filtering logic
+        function filterType(type) {
+            const cards = document.querySelectorAll('.company-card');
+            const buttons = document.querySelectorAll('.filter-btn');
+
+            buttons.forEach(btn => btn.classList.remove('active', 'bg-sky-600', 'text-white'));
+            buttons.forEach(btn => btn.classList.add('bg-slate-800', 'text-slate-300'));
+
+            event.target.classList.add('active', 'bg-sky-600', 'text-white');
+
+            cards.forEach(card => {
+                if (type === 'all' || card.dataset.type === type) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        // Live Search
+        function searchCompanies() {
+            const input = document.getElementById('searchInput').value.toLowerCase();
+            const cards = document.querySelectorAll('.company-card');
+
+            cards.forEach(card => {
+                const searchData = card.dataset.name.toLowerCase() + card.innerText.toLowerCase();
+                if (searchData.includes(input)) {
+                    card.style.display = 'flex';
+                } else {
+                    card.style.display = 'none';
+                }
+            });
+        }
+
+        // Modal for raw text copy
+        function copyAllText() {
+            const text = `eVTOL 指標廠商規格與第一性原理分析導出資料:
+
+1. JOBY Aviation (美國) | 架構: Tiltrotor
+- 座位: 5-seat pilot-optional
+- 航程: ~150 mi (241 km) | 時速: ~200 mph (322 km/h)
+- 狀態: FAA Type Certification in Progress
+- 官網: https://www.jobyaviation.com/
+- 第一性原理: 六個傾轉旋翼，過渡態控制複雜，巡航無死重，能量轉換效率最優。
+
+2. LILIUM (德國) | 架構: Vectored Thrust
+- 座位: 7-seat jet-like
+- 航程: ~250 km (155 mi) | 時速: ~280 km/h
+- 狀態: Crewed operations 2026
+- 官網: https://lilium.com/
+- 第一性原理: 36個管道風扇，高盤面負荷致起降電耗極高，但巡航速度與噪音表現優異。
+
+3. ARCHER (美國) | 架構: Tiltrotor
+- 座位: 4-seat piloted
+- 航程: ~100 km (60 mi) | 時速: ~240 km/h
+- 狀態: FAA Type Certification in Progress
+- 官網: https://www.archer.com/
+- 第一性原理: 12個旋翼(6傾轉/6固定)，兼顧製造可行性與能耗平衡。
+
+4. VERTICAL Aerospace (英國) | 架構: Lift + Cruise
+- 座位: 5-seat piloted
+- 航程: ~185 km (115 mi) | 時速: ~240 km/h
+- 狀態: Certification Program Underway
+- 官網: https://verticalaerospace.com/
+- 第一性原理: 獨立升力與推進旋翼，控制架構簡單，降低韌體風險，但巡航阻力較大。
+
+5. EVE Air Mobility (巴西) | 架構: Lift + Cruise
+- 座位: 4-6 seat
+- 航程: ~100 km (62 mi) | 時速: ~200 km/h
+- 狀態: Development in Progress
+- 官網: https://eveairmobility.com/
+- 第一性原理: Embraer背景，注重商業可維護性與低營運成本。
+
+6. VOLOCOPTER (德國) | 架構: Multicopter
+- 座位: 2-seat (VoloCity)
+- 航程: ~35 km (22 mi) | 時速: ~110 km/h
+- 狀態: Certification Efforts Halted (2025)
+- 官網: https://volocopter.com/
+- 第一性原理: 18旋翼高冗餘，安全但缺乏機翼升力，受限於電池能量密度瓶頸。
+
+7. AUTOFLIGHT (中國) | 架構: Lift + Cruise
+- 座位: 5-seat autonomous
+- 航程: ~250 km (155 mi) | 時速: ~200 km/h
+- 狀態: First flight completed
+- 官網: https://www.autoflight.com/
+- 第一性原理: 碳纖維輕量化，著重長航程展現。
+
+8. EHang 億航 (中國) | 架構: Multicopter
+- 座位: 2-seat autonomous
+- 航程: ~30 km (19 mi) | 時速: ~130 km/h
+- 狀態: Commercial Operations (China CAAC TC)
+- 官網: https://www.ehang.com/
+- 第一性原理: 首個取得中國TC的無人駕駛載人航空器，8臂16旋翼共軸雙槳。
+
+9. BETA Technologies (美國) | 架構: Lift + Cruise
+- 座位: 5-seat piloted
+- 航程: ~250 km (150 mi) | 時速: ~270 km/h
+- 狀態: FAA Certification in Progress
+- 官網: https://www.beta.team/
+- 第一性原理: 大翼展氣動優化，兼顧快充基礎設施佈局。
+
+10. WISK (美國) | 架構: Lift + Cruise
+- 座位: 2-4 seat autonomous
+- 航程: ~40 km (25 mi) | 時速: ~120 km/h
+- 狀態: Testing & Certification in Progress
+- 官網: https://wisk.aero/
+- 第一性原理: 波音全資，直接直擊全自主飛行，軟硬體冗餘要求最高。`;
+
+            document.getElementById('rawTextContent').value = text;
+            toggleModal(true);
+        }
+
+        function toggleModal(show) {
+            const modal = document.getElementById('copyModal');
+            if (show) modal.classList.remove('hidden');
+            else modal.classList.add('hidden');
+        }
+
+        function executeCopy() {
+            const text = document.getElementById('rawTextContent').value;
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(text).then(() => alert('已成功複製全文！'));
+            } else {
+                const textArea = document.getElementById('rawTextContent');
+                textArea.select();
+                document.execCommand('copy');
+                alert('已成功複製全文！');
+            }
+        }
+    </script>
+</body>
+</html>
