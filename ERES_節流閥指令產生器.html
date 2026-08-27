@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PCAN Payload Generator & Decoder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', system-ui, -apple-system, sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-4 md:p-8 flex justify-center items-center">
+
+    <div class="w-full max-w-2xl bg-slate-900 border border-slate-800 rounded-2xl p-6 md:p-8 shadow-2xl space-y-8">
+        
+        <!-- Header -->
+        <div class="border-b border-slate-800 pb-4">
+            <h1 class="text-2xl font-bold text-blue-400 flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                PCAN Payload Generator & Decoder
+            </h1>
+            <p class="text-xs text-slate-400 mt-1">Gogoro 節氣門步進馬達 CAN Bus 雙向封包工具 (CMD 01 ~ CMD 08)</p>
+        </div>
+
+        <!-- Encoder Section -->
+        <div class="space-y-5">
+            <h2 class="text-sm font-semibold tracking-wider text-slate-400 uppercase">1. 指令封包產生器 (Encoder)</h2>
+            
+            <div>
+                <label for="cmdSelect" class="block text-sm font-medium text-slate-300 mb-2">選擇控制指令 (CMD)</label>
+                <select id="cmdSelect" onchange="onCmdChange()" 
+                        class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                    <option value="1">CMD 01: 正轉 [Degree] (Float32 相對位移)</option>
+                    <option value="2">CMD 02: 反轉 [Degree] (Float32 相對位移)</option>
+                    <option value="3">CMD 03: 要求 RPM 回報 (無 Payload)</option>
+                    <option value="4">CMD 04: 要求 位置 回報 (無 Payload)</option>
+                    <option value="5">CMD 05: Servo On/Off (Byte1: 0=Off, 1=On)</option>
+                    <option value="6">CMD 06: 絕對位置命令 [Degree] (Float32)</option>
+                    <option value="7">CMD 07: 加速 Ramp 設定 (Int16 Steps + Int16 DelayUs)</option>
+                    <option value="8">CMD 08: 轉速設定 [RPM] (Float32)</option>
+                    <option value="9">CMD 09: 模式切換 (Float32: 0, 1, 2, 3)</option>
+                </select>
+            </div>
+
+            <!-- Dynamic Input Container -->
+            <div id="paramContainer" class="space-y-4">
+                <!-- Javascript will inject inputs here -->
+            </div>
+
+            <div>
+                <label class="block text-sm font-medium text-slate-300 mb-2">輸出 CAN Payload (Hex)</label>
+                <div id="resultBox" class="w-full bg-slate-950 border border-slate-800 rounded-lg p-4 font-mono text-center text-lg tracking-widest text-emerald-400 shadow-inner break-words min-h-[60px] flex items-center justify-center">
+                    01 00 00 B4 42 00 00 F5
+                </div>
+            </div>
+
+            <button onclick="generateHex()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-semibold py-3 rounded-lg transition-all duration-200 shadow-[0_0_15px_rgba(37,99,235,0.3)] active:scale-95 flex justify-center items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                </svg>
+                產生 Payload 並複製
+            </button>
+        </div>
+
+        <hr class="border-slate-800">
+
+        <!-- Decoder Section -->
+        <div class="space-y-5">
+            <h2 class="text-sm font-semibold tracking-wider text-slate-400 uppercase">2. CAN 封包解碼器 (Decoder)</h2>
+            
+            <div>
+                <label for="hexInput" class="block text-sm font-medium text-slate-300 mb-2">輸入 8-Byte Hex (可帶空格，如: 04 00 00 B4 42 00 00 FC)</label>
+                <input type="text" id="hexInput" placeholder="例如: 04 00 00 B4 42 00 00 FC"
+                       class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 font-mono text-white focus:outline-none focus:border-emerald-500 transition-colors uppercase">
+            </div>
+
+            <button onclick="decodeHex()" class="w-full bg-emerald-600 hover:bg-emerald-500 text-white font-semibold py-3 rounded-lg transition-all duration-200 shadow-[0_0_15px_rgba(16,185,129,0.3)] active:scale-95 flex justify-center items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+                解析 Payload 數值
+            </button>
+
+            <!-- Decode Result Board -->
+            <div id="decodeResult" class="hidden bg-slate-950 border border-slate-800 rounded-lg p-5 space-y-3 font-mono text-sm">
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span class="text-slate-400">Checksum 狀態:</span>
+                    <span id="decodeCksStatus" class="font-bold">--</span>
+                </div>
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span class="text-slate-400">解析指令 (CMD):</span>
+                    <span id="decodeCmd" class="text-blue-400 font-bold">--</span>
+                </div>
+                <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+                    <span class="text-slate-400">Payload 物理數值:</span>
+                    <span id="decodeValue" class="text-emerald-400 font-bold">--</span>
+                </div>
+                <div class="text-xs text-slate-500 pt-1" id="decodeRawHint">--</div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-5 right-5 bg-emerald-500 text-slate-950 px-5 py-3 rounded-xl font-medium shadow-lg transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none flex items-center gap-2">
+        <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+            <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+        </svg>
+        <span id="toastMsg">已成功複製 Payload！</span>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            onCmdChange();
+        });
+
+        function onCmdChange() {
+            const cmd = parseInt(document.getElementById('cmdSelect').value);
+            const container = document.getElementById('paramContainer');
+            container.innerHTML = '';
+
+            if (cmd === 1 || cmd === 2 || cmd === 6) {
+                container.innerHTML = `
+                    <div>
+                        <label for="floatParam" class="block text-sm font-medium text-slate-300 mb-2">目標角度 (Degree)</label>
+                        <div class="relative">
+                            <input type="number" id="floatParam" step="any" placeholder="例如: 90 或 -45" value="90"
+                                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400">°</div>
+                        </div>
+                    </div>
+                `;
+            } else if (cmd === 5) {
+                container.innerHTML = `
+                    <div>
+                        <label for="servoParam" class="block text-sm font-medium text-slate-300 mb-2">Servo 狀態</label>
+                        <select id="servoParam" class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                            <option value="1">01: Enable (開)</option>
+                            <option value="0">00: Disable (關)</option>
+                        </select>
+                    </div>
+                `;
+            } else if (cmd === 7) {
+                container.innerHTML = `
+                    <div class="grid grid-cols-2 gap-3">
+                        <div>
+                            <label for="rampStepsParam" class="block text-sm font-medium text-slate-300 mb-2">Ramp Steps (Int16)</label>
+                            <input type="number" id="rampStepsParam" value="100" placeholder="100" 
+                                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                        </div>
+                        <div>
+                            <label for="rampDelayParam" class="block text-sm font-medium text-slate-300 mb-2">Ramp Delay us (Int16)</label>
+                            <input type="number" id="rampDelayParam" value="150" placeholder="150" 
+                                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                        </div>
+                    </div>
+                `;
+            } else if (cmd === 8) {
+                container.innerHTML = `
+                    <div>
+                        <label for="floatParam" class="block text-sm font-medium text-slate-300 mb-2">目標轉速 (RPM)</label>
+                        <div class="relative">
+                            <input type="number" id="floatParam" step="any" placeholder="例如: 12.5" value="10"
+                                   class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                            <div class="absolute inset-y-0 right-0 flex items-center pr-4 pointer-events-none text-slate-400">RPM</div>
+                        </div>
+                    </div>
+                `;
+            } else if (cmd === 9) {
+                container.innerHTML = `
+                    <div>
+                        <label for="floatParam" class="block text-sm font-medium text-slate-300 mb-2">控制模式 (0, 1, 2, 3)</label>
+                        <input type="number" id="floatParam" step="1" min="0" max="3" value="2"
+                               class="w-full bg-slate-800 border border-slate-700 rounded-lg px-4 py-3 text-white focus:outline-none focus:border-blue-500 transition-colors">
+                    </div>
+                `;
+            } else {
+                container.innerHTML = `
+                    <div class="text-xs text-slate-400 bg-slate-800/40 p-3 rounded-lg border border-slate-700/50">
+                        此指令為 Query 查詢，Data Byte 1~6 為固定補 0x00。
+                    </div>
+                `;
+            }
+        }
+
+        function generateHex() {
+            const cmd = parseInt(document.getElementById('cmdSelect').value);
+            const bytes = [cmd, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
+
+            if (cmd === 1 || cmd === 2 || cmd === 6 || cmd === 8 || cmd === 9) {
+                const valInput = document.getElementById('floatParam');
+                const val = parseFloat(valInput ? valInput.value : 0);
+                if (isNaN(val)) {
+                    showToast("請輸入有效的數值", true);
+                    return;
+                }
+                const buffer = new ArrayBuffer(4);
+                const view = new DataView(buffer);
+                view.setFloat32(0, val, true); // Little Endian
+                bytes[1] = view.getUint8(0);
+                bytes[2] = view.getUint8(1);
+                bytes[3] = view.getUint8(2);
+                bytes[4] = view.getUint8(3);
+            } else if (cmd === 5) {
+                const servoVal = parseInt(document.getElementById('servoParam').value);
+                bytes[1] = servoVal & 0xFF;
+            } else if (cmd === 7) {
+                const steps = parseInt(document.getElementById('rampStepsParam').value) || 0;
+                const delayUs = parseInt(document.getElementById('rampDelayParam').value) || 0;
+                
+                const buffer = new ArrayBuffer(4);
+                const view = new DataView(buffer);
+                view.setInt16(0, steps, true);
+                view.setInt16(2, delayUs, true);
+
+                bytes[1] = view.getUint8(0);
+                bytes[2] = view.getUint8(1);
+                bytes[3] = view.getUint8(2);
+                bytes[4] = view.getUint8(3);
+            }
+
+            // Checksum (2's complement of sum of bytes 0..6)
+            let sum = 0;
+            for (let i = 0; i < 7; i++) {
+                sum += bytes[i];
+            }
+            const checksum = (0 - sum) & 0xFF;
+            bytes.push(checksum);
+
+            const hexString = bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+            document.getElementById('resultBox').textContent = hexString;
+            copyToClipboard(hexString);
+        }
+
+        function decodeHex() {
+            const raw = document.getElementById('hexInput').value.trim();
+            const cleanHex = raw.replace(/[^0-9a-fA-F]/g, '');
+
+            if (cleanHex.length !== 16) {
+                showToast("無效的 Payload 長度！必須精準為 8 個 Byte (16 個 Hex 字元)", true);
+                return;
+            }
+
+            const bytes = [];
+            for (let i = 0; i < 16; i += 2) {
+                bytes.push(parseInt(cleanHex.substr(i, 2), 16));
+            }
+
+            // Calculate Checksum
+            let totalSum = bytes.reduce((acc, curr) => acc + curr, 0);
+            const isChecksumValid = (totalSum & 0xFF) === 0;
+
+            const cmd = bytes[0];
+            const buffer = new ArrayBuffer(4);
+            const view = new DataView(buffer);
+            for (let i = 0; i < 4; i++) {
+                view.setUint8(i, bytes[i + 1]);
+            }
+
+            let decodedText = "";
+            let cmdName = `CMD 0${cmd}`;
+
+            if (cmd === 1 || cmd === 2 || cmd === 4 || cmd === 6) {
+                const val = view.getFloat32(0, true);
+                decodedText = `${val.toFixed(2)} ° (Degree)`;
+                if (cmd === 4) cmdName = "CMD 04: 位置回報數據";
+            } else if (cmd === 3 || cmd === 8) {
+                const val = view.getFloat32(0, true);
+                decodedText = `${val.toFixed(2)} RPM`;
+                if (cmd === 3) cmdName = "CMD 03: RPM回報數據";
+            } else if (cmd === 5) {
+                cmdName = "CMD 05: Servo 控制";
+                decodedText = bytes[1] === 1 ? "Enable (0x01)" : "Disable (0x00)";
+            } else if (cmd === 7) {
+                cmdName = "CMD 07: Ramp 加速設定";
+                const steps = view.getInt16(0, true);
+                const delayUs = view.getInt16(2, true);
+                decodedText = `Steps: ${steps}, Delay: ${delayUs} us`;
+            } else if (cmd === 9) {
+                cmdName = "CMD 09: 模式切換";
+                const modeVal = view.getFloat32(0, true);
+                decodedText = `切換至 M${parseInt(modeVal)} 模式`;
+            } else {
+                decodedText = `未知指令，Bytes 1~4: 0x${bytes.slice(1, 5).map(b => b.toString(16).padStart(2,'0')).join('')}`;
+            }
+
+            // Render Results
+            const statusElem = document.getElementById('decodeCksStatus');
+            if (isChecksumValid) {
+                statusElem.textContent = "OK (無失真)";
+                statusElem.className = "text-emerald-400 font-bold";
+            } else {
+                statusElem.textContent = "Error (驗證失敗/數據損毀)";
+                statusElem.className = "text-rose-500 font-bold";
+            }
+
+            document.getElementById('decodeCmd').textContent = cmdName;
+            document.getElementById('decodeValue').textContent = decodedText;
+            document.getElementById('decodeRawHint').textContent = `Raw Byte 0~7: ${bytes.map(b => b.toString(16).padStart(2, '0').toUpperCase()).join(' ')}`;
+            
+            document.getElementById('decodeResult').classList.remove('hidden');
+        }
+
+        function copyToClipboard(text) {
+            const tempInput = document.createElement("textarea");
+            tempInput.value = text;
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand("copy");
+            document.body.removeChild(tempInput);
+            showToast("已成功產生並複製 Payload 至剪貼簿！");
+        }
+
+        function showToast(msg, isError = false) {
+            const toast = document.getElementById('toast');
+            const toastMsg = document.getElementById('toastMsg');
+            toastMsg.textContent = msg;
+            
+            if (isError) {
+                toast.classList.remove('bg-emerald-500', 'text-slate-950');
+                toast.classList.add('bg-rose-500', 'text-white');
+            } else {
+                toast.classList.remove('bg-rose-500', 'text-white');
+                toast.classList.add('bg-emerald-500', 'text-slate-950');
+            }
+
+            toast.classList.remove('translate-y-20', 'opacity-0');
+            setTimeout(() => {
+                toast.classList.add('translate-y-20', 'opacity-0');
+            }, 2500);
+        }
+    </script>
+</body>
+</html>
